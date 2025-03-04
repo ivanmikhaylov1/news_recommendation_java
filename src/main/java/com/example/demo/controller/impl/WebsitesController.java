@@ -1,18 +1,12 @@
 package com.example.demo.controller.impl;
 
 import com.example.demo.controller.WebsitesOperations;
-import com.example.demo.domain.dto.request.IdRequest;
 import com.example.demo.domain.model.Website;
 import com.example.demo.service.WebsitesService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;

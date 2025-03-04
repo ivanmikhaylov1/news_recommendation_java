@@ -8,24 +8,32 @@ logging:
     org.hibernate: INFO
 
 server:
+  port: 8080
   tomcat:
     apr:
       enabled: false
 
 spring:
+  application:
+    name: news_recommendation_java
   datasource:
-    url: jdbc:postgresql://localhost:5432/recommendation_service_db
+    url: jdbc:postgresql://localhost:5432/mydb
     username: postgres
-    password: admin
+    password: postgres
     driver-class-name: org.postgresql.Driver
+  sql:
+    init:
+      mode: always
   jpa:
+    generate-ddl: true
     hibernate:
-      ddl-auto: create-drop
-    database: postgresql
-    show-sql: true
+      ddl-auto: update
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+        show_sql: true
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
 
 jwt:
   secret: 53A73E5F1C4E0A2D3B5F2D784E6A1B423D6F247D1F6E5C3A596D635A75327855

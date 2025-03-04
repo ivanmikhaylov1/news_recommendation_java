@@ -18,7 +18,7 @@ public class CategoriesService {
   private final CategoryRepository repository;
   private final UsersService usersService;
 
-  public List<Category> getDefaultCategories(){
+  public List<Category> getDefaultCategories() {
     return repository.getDefaultCategories();
   }
 
@@ -33,7 +33,7 @@ public class CategoriesService {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category with this ID not fount");
     }
     User user = usersService.getCurrentUser();
-    repository.chooseCategory(user, category.get());
+    repository.chooseCategory(user.getId(), category.get().getId());
   }
 
   public void removeCategory(Long categoryId) {
@@ -42,12 +42,12 @@ public class CategoriesService {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category with this ID not fount");
     }
     User user = usersService.getCurrentUser();
-    repository.removeCategory(user, category.get());
+    repository.removeCategory(user.getId(), category.get().getId());
   }
 
   public Category createCategory(Category category) {
     User user = usersService.getCurrentUser();
     category.setOwner(user);
-    return repository.createCategory(category);
+    return repository.save(category);
   }
 }

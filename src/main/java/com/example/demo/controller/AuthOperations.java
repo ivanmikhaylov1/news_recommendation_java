@@ -1,12 +1,15 @@
 package com.example.demo.controller;
+
 import com.example.demo.domain.dto.request.SignRequest;
 import com.example.demo.domain.dto.response.JwtAuthenticationResponse;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 
 
 @Tag(name = "Authentication operations", description = "Авторизация и регистрация")
