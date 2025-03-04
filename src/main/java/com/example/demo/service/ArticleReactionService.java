@@ -22,17 +22,17 @@ public class ArticleReactionService {
   private final UserReactionRepository userReactionRepository;
   private final ArticlesRepository articlesRepository;
 
-  public ArticleReaction getAllReactionsForArticle(Long articleId) {
+  public ArticleReaction retrieveArticleReactions(Long articleId) {
     return articleReactionRepository.findByArticleId(articleId);
   }
 
-  public List<Article> getTopRatedArticles() {
+  public List<Article> fetchTopRatedArticles() {
     return articlesRepository.findTop10();
   }
 
-  public void processUserReaction(User user, Article article, UserReaction.ReactionType reactionType) {
+  public void handleUserReaction(User user, Article article, UserReaction.ReactionType reactionType) {
     Optional<UserReaction> existingReaction = userReactionRepository
-        .findByUserId(user.getId(), article.getId());
+        .findByUserIdAndArticleId(user.getId(), article.getId());
 
     UserReaction reaction = existingReaction.orElse(UserReaction.builder()
         .user(user)
@@ -43,11 +43,11 @@ public class ArticleReactionService {
     reaction.setReactionType(reactionType);
     userReactionRepository.save(reaction);
 
-    updateArticleRating(article);
+    calculateReactionStatistics(article);
   }
 
-  private void updateArticleRating(Article article) {
-    ArticleReaction articleReaction = articleReactionRepository.findByArticleId(article.getId());
+  private void calculateReactionStatistics(Article article) {
+    ArticleReaction articleReaction = retrieveArticleReactions(article.getId());
     if (articleReaction == null) {
       articleReaction = ArticleReaction.builder()
           .article(article)
@@ -56,8 +56,8 @@ public class ArticleReactionService {
           .build();
     }
 
-    long likesCount = userReactionRepository.countRating(article.getId(), UserReaction.ReactionType.LIKE);
-    long dislikesCount = userReactionRepository.countRating(article.getId(), UserReaction.ReactionType.DISLIKE);
+    long likesCount = userReactionRepository.countByArticleIdAndReactionType(article.getId(), UserReaction.ReactionType.LIKE);
+    long dislikesCount = userReactionRepository.countByArticleIdAndReactionType(article.getId(), UserReaction.ReactionType.DISLIKE);
 
     articleReaction.setLikesCount((int) likesCount);
     articleReaction.setDislikesCount((int) dislikesCount);

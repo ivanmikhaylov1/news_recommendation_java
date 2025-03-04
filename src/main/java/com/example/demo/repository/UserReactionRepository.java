@@ -8,7 +8,7 @@ import java.util.Optional;
 
 @Repository
 public interface UserReactionRepository extends JpaRepository<UserReaction, Long> {
-  Optional<UserReaction> findByUserId(Long userId, Long articleId);
+  Optional<UserReaction> findByUserIdAndArticleId(Long userId, Long articleId);
 
-  long countRating(Long articleId, UserReaction.ReactionType reactionType);
+  long countByArticleIdAndReactionType(Long articleId, UserReaction.ReactionType reactionType);
 }
