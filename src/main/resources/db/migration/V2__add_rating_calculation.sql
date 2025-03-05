@@ -22,7 +22,7 @@ BEGIN
                ELSE (likes::FLOAT - dislikes::FLOAT) / (likes + dislikes)::FLOAT
         END;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 CREATE OR REPLACE FUNCTION update_article_reaction()
     RETURNS TRIGGER AS
@@ -46,7 +46,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DROP TRIGGER IF EXISTS user_reaction_trigger ON user_reactions;
 CREATE TRIGGER user_reaction_trigger
