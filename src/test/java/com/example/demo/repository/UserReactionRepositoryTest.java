@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -14,6 +15,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
+@Transactional
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @TestPropertySource(properties = {
     "spring.datasource.url=jdbc:postgresql://localhost:5432/postgres",
@@ -75,7 +77,7 @@ class UserReactionRepositoryTest {
 
     @Test
     void shouldFindByUserReaction() {
-        UserReaction savedReaction = userReactionRepository.save(userReaction);
+        userReactionRepository.save(userReaction);
         Optional<UserReaction> foundReaction = userReactionRepository.findByUserReaction(user.getId(), article.getId());
         assertThat(foundReaction).isPresent();
         assertThat(foundReaction.get().getUser().getId()).isEqualTo(user.getId());
