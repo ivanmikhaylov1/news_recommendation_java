@@ -10,21 +10,21 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class UserReactionService {
-    private final UserReactionRepository userReactionRepository;
+  private final UserReactionRepository userReactionRepository;
 
-    public Optional<UserReaction> findUserReaction(Long userId, Long articleId) {
-        return userReactionRepository.findByUserReaction(userId, articleId);
-    }
+  public Optional<UserReaction> findUserReaction(Long userId, Long articleId) {
+    return userReactionRepository.findByUserReaction(userId, articleId);
+  }
 
-    public long countReactionsByType(Long articleId, UserReaction.ReactionType reactionType) {
-        return userReactionRepository.countReactionsByType(articleId, reactionType);
-    }
+  public long countReactionsByType(Long articleId, UserReaction.ReactionType reactionType) {
+    return userReactionRepository.countReactionsByType(articleId, reactionType);
+  }
 
-    public UserReaction saveUserReaction(UserReaction userReaction) {
-        return userReactionRepository.save(userReaction);
-    }
+  public UserReaction saveUserReaction(UserReaction userReaction) {
+    return userReactionRepository.save(userReaction);
+  }
 
-    public void deleteUserReaction(UserReaction userReaction) {
-        userReactionRepository.delete(userReaction);
-    }
+  public void deleteUserReaction(UserReaction userReaction) {
+    userReactionRepository.delete(userReaction);
+  }
 }
