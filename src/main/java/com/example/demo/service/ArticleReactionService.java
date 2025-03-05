@@ -32,7 +32,7 @@ public class ArticleReactionService {
 
   public void handleUserReaction(User user, Article article, UserReaction.ReactionType reactionType) {
     Optional<UserReaction> existingReaction = userReactionRepository
-        .findByUserIdAndArticleId(user.getId(), article.getId());
+        .findByUserReaction(user.getId(), article.getId());
 
     UserReaction reaction = existingReaction.orElse(UserReaction.builder()
         .user(user)
@@ -56,8 +56,8 @@ public class ArticleReactionService {
           .build();
     }
 
-    long likesCount = userReactionRepository.countByArticleIdAndReactionType(article.getId(), UserReaction.ReactionType.LIKE);
-    long dislikesCount = userReactionRepository.countByArticleIdAndReactionType(article.getId(), UserReaction.ReactionType.DISLIKE);
+    long likesCount = userReactionRepository.countReactionsByType(article.getId(), UserReaction.ReactionType.LIKE);
+    long dislikesCount = userReactionRepository.countReactionsByType(article.getId(), UserReaction.ReactionType.DISLIKE);
 
     articleReaction.setLikesCount((int) likesCount);
     articleReaction.setDislikesCount((int) dislikesCount);
