@@ -92,7 +92,7 @@ class ArticleReactionRepositoryTest {
     articleReactionRepository.deleteAll();
     articlesRepository.deleteAll();
     
-    for (int i = 14; i >= 0; i--) {
+    for (int i = 0; i < 15; i++) {
       Website website = websiteRepository.save(Website.builder()
           .name("Website " + i)
           .url("https://test" + i + ".com")
@@ -113,9 +113,9 @@ class ArticleReactionRepositoryTest {
 
       ArticleReaction reaction = ArticleReaction.builder()
           .article(article)
-          .likesCount(i)
+          .likesCount(14 - i)
           .dislikesCount(0)
-          .rating(14.0f - i)
+          .rating((float) (14 - i))
           .build();
 
       articleReactionRepository.save(reaction);
@@ -123,7 +123,7 @@ class ArticleReactionRepositoryTest {
 
     List<Article> top10Articles = articleReactionRepository.findTop10();
     assertThat(top10Articles).hasSize(10);
-    assertThat(top10Articles.get(0).getName()).isEqualTo("Article 14");
-    assertThat(top10Articles.get(9).getName()).isEqualTo("Article 5");
+    assertThat(top10Articles.get(0).getName()).isEqualTo("Article 0");
+    assertThat(top10Articles.get(9).getName()).isEqualTo("Article 9");
   }
 }

@@ -75,6 +75,7 @@ class UserReactionRepositoryTest {
 
     @Test
     void shouldFindByUserReaction() {
+        UserReaction savedReaction = userReactionRepository.save(userReaction);
         Optional<UserReaction> foundReaction = userReactionRepository.findByUserReaction(user.getId(), article.getId());
         assertThat(foundReaction).isPresent();
         assertThat(foundReaction.get().getUser().getId()).isEqualTo(user.getId());
