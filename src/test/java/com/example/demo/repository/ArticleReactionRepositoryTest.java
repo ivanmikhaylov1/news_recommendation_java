@@ -92,7 +92,10 @@ class ArticleReactionRepositoryTest {
 
   @Test
   void shouldFindTop10Articles() {
-    for (int i = 0; i < 15; i++) {
+    articleReactionRepository.deleteAll();
+    articlesRepository.deleteAll();
+    
+    for (int i = 14; i >= 0; i--) {
       Website website = websiteRepository.save(Website.builder()
           .name("Website " + i)
           .url("https://test" + i + ".com")
@@ -115,7 +118,7 @@ class ArticleReactionRepositoryTest {
           .article(article)
           .likesCount(i)
           .dislikesCount(0)
-          .rating((float) i)
+          .rating(14.0f - i)
           .build();
 
       articleReactionRepository.save(reaction);

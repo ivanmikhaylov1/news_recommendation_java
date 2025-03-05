@@ -12,6 +12,6 @@ import java.util.List;
 public interface ArticleReactionRepository extends JpaRepository<ArticleReaction, Long> {
   ArticleReaction findByArticleId(Long articleId);
 
-  @Query(value = "SELECT a.* FROM articles a LEFT JOIN article_reactions ar ON a.article_id = ar.article_id ORDER BY ar.rating DESC LIMIT 10", nativeQuery = true)
+  @Query(value = "SELECT a.* FROM articles a LEFT JOIN article_reactions ar ON a.article_id = ar.article_id ORDER BY ar.likes_count DESC LIMIT 10", nativeQuery = true)
   List<Article> findTop10();
 }
