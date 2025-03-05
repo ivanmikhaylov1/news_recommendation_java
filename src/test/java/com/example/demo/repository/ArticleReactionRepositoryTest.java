@@ -71,7 +71,6 @@ class ArticleReactionRepositoryTest {
   @Test
   void shouldSaveArticleReaction() {
     ArticleReaction savedReaction = articleReactionRepository.save(articleReaction);
-
     assertThat(savedReaction).isNotNull();
     assertThat(savedReaction.getId()).isNotNull();
     assertThat(savedReaction.getArticle()).isEqualTo(article);
@@ -83,9 +82,7 @@ class ArticleReactionRepositoryTest {
   @Test
   void shouldFindByArticleId() {
     articleReactionRepository.save(articleReaction);
-
     ArticleReaction foundReaction = articleReactionRepository.findByArticleId(article.getId());
-
     assertThat(foundReaction).isNotNull();
     assertThat(foundReaction.getArticle().getId()).isEqualTo(article.getId());
   }
@@ -125,7 +122,6 @@ class ArticleReactionRepositoryTest {
     }
 
     List<Article> top10Articles = articleReactionRepository.findTop10();
-
     assertThat(top10Articles).hasSize(10);
     assertThat(top10Articles.get(0).getName()).isEqualTo("Article 14");
     assertThat(top10Articles.get(9).getName()).isEqualTo("Article 5");

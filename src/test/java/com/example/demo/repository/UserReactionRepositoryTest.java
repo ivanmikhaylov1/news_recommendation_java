@@ -75,10 +75,7 @@ class UserReactionRepositoryTest {
 
     @Test
     void shouldFindByUserReaction() {
-        UserReaction savedReaction = userReactionRepository.save(userReaction);
-
         Optional<UserReaction> foundReaction = userReactionRepository.findByUserReaction(user.getId(), article.getId());
-
         assertThat(foundReaction).isPresent();
         assertThat(foundReaction.get().getUser().getId()).isEqualTo(user.getId());
         assertThat(foundReaction.get().getArticle().getId()).isEqualTo(article.getId());
@@ -88,8 +85,6 @@ class UserReactionRepositoryTest {
     @Test
     void shouldCountReactionsByType() {
         userReactionRepository.save(userReaction);
-
-        // Create another user with the same reaction type
         User user2 = userRepository.save(User.builder()
             .username("testUser2")
             .password("password")
@@ -102,10 +97,8 @@ class UserReactionRepositoryTest {
             .build();
 
         userReactionRepository.save(userReaction2);
-
         long likeCount = userReactionRepository.countReactionsByType(article.getId(), UserReaction.ReactionType.LIKE);
         long dislikeCount = userReactionRepository.countReactionsByType(article.getId(), UserReaction.ReactionType.DISLIKE);
-
         assertThat(likeCount).isEqualTo(2);
         assertThat(dislikeCount).isZero();
     }
