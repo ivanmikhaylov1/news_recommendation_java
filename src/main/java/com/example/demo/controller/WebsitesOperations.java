@@ -1,14 +1,13 @@
 package com.example.demo.controller;
 
-import com.example.demo.domain.dto.request.IdRequest;
 import com.example.demo.domain.model.Website;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.validation.Valid;
 import java.util.List;
 
 @Tag(name = "Websites operations", description = "Управление веб-сайтами")

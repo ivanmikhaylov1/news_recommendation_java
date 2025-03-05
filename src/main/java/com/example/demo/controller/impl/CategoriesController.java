@@ -1,7 +1,6 @@
 package com.example.demo.controller.impl;
 
 import com.example.demo.controller.CategoriesOperations;
-import com.example.demo.domain.dto.request.IdRequest;
 import com.example.demo.domain.model.Category;
 import com.example.demo.service.CategoriesService;
 import jakarta.validation.Valid;

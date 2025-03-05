@@ -33,7 +33,7 @@ public class WebsitesService {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Website with this ID not found");
     }
     User user = usersService.getCurrentUser();
-    repository.chooseWebsite(user, website.get());
+    repository.chooseWebsite(user.getId(), website.get().getId());
   }
 
   public void removeWebsite(Long websiteId) {
@@ -42,12 +42,12 @@ public class WebsitesService {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Website with this ID not found");
     }
     User user = usersService.getCurrentUser();
-    repository.removeWebsite(user, website.get());
+    repository.removeWebsite(user.getId(), website.get().getId());
   }
 
   public Website createWebsite(Website website) {
     User user = usersService.getCurrentUser();
     website.setOwner(user);
-    return repository.createWebsite(website);
+    return repository.save(website);
   }
 }

@@ -48,6 +48,7 @@ public class JwtService {
     return claimsResolvers.apply(claims);
   }
 
+  @SuppressWarnings("deprecation")
   private String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
     return Jwts.builder().setClaims(extraClaims).setSubject(userDetails.getUsername())
         .setIssuedAt(new Date(System.currentTimeMillis()))
@@ -63,6 +64,7 @@ public class JwtService {
     return extractClaim(token, Claims::getExpiration);
   }
 
+  @SuppressWarnings("deprecation")
   private Claims extractAllClaims(String token) {
     return Jwts.parser().setSigningKey(getSigningKey()).build().parseClaimsJws(token)
         .getBody();
