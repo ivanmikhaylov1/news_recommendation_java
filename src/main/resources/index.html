@@ -1,0 +1,282 @@
+<html lang="ru">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Новостной сайт</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet"/>
+    <style>
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 50;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 8px;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .interest-item {
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.3s;
+        }
+        .interest-item.selected {
+            border-color: #3b82f6;
+        }
+        .page {
+            display: none;
+        }
+        .page.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="font-roboto bg-gray-100">
+<!-- Header -->
+<header class="bg-blue-600 text-white p-4">
+    <div class="container mx-auto flex flex-col md:flex-row justify-between items-center">
+        <h1 class="text-2xl font-bold mb-4 md:mb-0">Новостной сайт</h1>
+        <nav class="w-full md:w-auto">
+            <ul class="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
+                <li>
+                    <a class="hover:underline cursor-pointer" id="homeBtn">Главная</a>
+                </li>
+                <li>
+                    <a class="hover:underline cursor-pointer" id="registerBtn">Регистрация</a>
+                </li>
+                <li>
+                    <a class="hover:underline cursor-pointer" id="loginBtn">Вход</a>
+                </li>
+                <li>
+                    <a class="hover:underline cursor-pointer" id="profileBtn">Профиль</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+</header>
+<!-- Main Content -->
+<main class="container mx-auto mt-8 px-4">
+    <!-- Home Page -->
+    <section class="mb-8 page active" id="home">
+        <h2 class="text-3xl font-bold mb-4">Общая новостная лента</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- News Item -->
+            <div class="bg-white p-4 rounded shadow">
+                <img alt="Изображение новости о новейших технологиях в IT индустрии" class="w-full h-40 object-cover rounded mb-4" height="400" src="https://storage.googleapis.com/a1aa/image/79nHL8kX6NB9nCW1dwJqj2jMAZQnx2ErrGV8HI-C9Dg.jpg" width="600"/>
+                <h3 class="text-xl font-bold mb-2">Заголовок новости 1</h3>
+                <p class="text-gray-700">Краткое описание новости 1...</p>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <img alt="Изображение новости о последних достижениях в области искусственного интеллекта" class="w-full h-40 object-cover rounded mb-4" height="400" src="https://storage.googleapis.com/a1aa/image/J2nAXl_qeXFDOMDPBBCEl7dfqAl6VcTBgdEoZVkitXs.jpg" width="600"/>
+                <h3 class="text-xl font-bold mb-2">Заголовок новости 2</h3>
+                <p class="text-gray-700">Краткое описание новости 2...</p>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <img alt="Изображение новости о новых разработках в области кибербезопасности" class="w-full h-40 object-cover rounded mb-4" height="400" src="https://storage.googleapis.com/a1aa/image/BCEOxduiqkQJTHkrfO6pzE7leG7jYT-geWS6oSN1WaQ.jpg" width="600"/>
+                <h3 class="text-xl font-bold mb-2">Заголовок новости 3</h3>
+                <p class="text-gray-700">Краткое описание новости 3...</p>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <img alt="Изображение новости о новых тенденциях в разработке программного обеспечения" class="w-full h-40 object-cover rounded mb-4" height="400" src="https://storage.googleapis.com/a1aa/image/31Ro9wmeUeU3Y0a4Hu-VlZ7wuYZTl5lBK5tlT_ar_jE.jpg" width="600"/>
+                <h3 class="text-xl font-bold mb-2">Заголовок новости 4</h3>
+                <p class="text-gray-700">Краткое описание новости 4...</p>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <img alt="Изображение новости о новых гаджетах и устройствах" class="w-full h-40 object-cover rounded mb-4" height="400" src="https://storage.googleapis.com/a1aa/image/Nr28V5zC1CHIPYS-VFnPtOjwGKMgys9j8WExss_KlaA.jpg" width="600"/>
+                <h3 class="text-xl font-bold mb-2">Заголовок новости 5</h3>
+                <p class="text-gray-700">Краткое описание новости 5...</p>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <img alt="Изображение новости о новых стартапах в IT сфере" class="w-full h-40 object-cover rounded mb-4" height="400" src="https://storage.googleapis.com/a1aa/image/ifFkHuvNMSNE83AVTLv8mRQi3P-s3gRkI1v_fEZ8G0E.jpg" width="600"/>
+                <h3 class="text-xl font-bold mb-2">Заголовок новости 6</h3>
+                <p class="text-gray-700">Краткое описание новости 6...</p>
+            </div>
+        </div>
+    </section>
+    <!-- User Profile Page -->
+    <section class="mb-8 page" id="profile">
+        <h2 class="text-3xl font-bold mb-4">Профиль пользователя</h2>
+        <div class="bg-white p-6 rounded shadow-md mb-8">
+            <h3 class="text-2xl font-bold mb-4">Персональная лента новостей</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div class="bg-white p-4 rounded shadow">
+                    <img alt="Изображение персональной новости о новейших технологиях в IT индустрии" class="w-full h-40 object-cover rounded mb-4" height="400" src="https://storage.googleapis.com/a1aa/image/b8QoeHMMbmiauttpTE-_ZInw5jxDoCwBOTIhSAO7yCY.jpg" width="600"/>
+                    <h3 class="text-xl font-bold mb-2">Заголовок персональной новости 1</h3>
+                    <p class="text-gray-700">Краткое описание персональной новости 1...</p>
+                </div>
+                <div class="bg-white p-4 rounded shadow">
+                    <img alt="Изображение персональной новости о последних достижениях в области искусственного интеллекта" class="w-full h-40 object-cover rounded mb-4" height="400" src="https://storage.googleapis.com/a1aa/image/eaFwcff5ON3xFmFEg1HI6VZdIWwTSGDTygxipj7flVc.jpg" width="600"/>
+                    <h3 class="text-xl font-bold mb-2">Заголовок персональной новости 2</h3>
+                    <p class="text-gray-700">Краткое описание персональной новости 2...</p>
+                </div>
+                <div class="bg-white p-4 rounded shadow">
+                    <img alt="Изображение персональной новости о новых разработках в области кибербезопасности" class="w-full h-40 object-cover rounded mb-4" height="400" src="https://storage.googleapis.com/a1aa/image/z89Oa_AYmsuXXKsL1h-nxAAdzE8TtvS2ui7BheQDjug.jpg" width="600"/>
+                    <h3 class="text-xl font-bold mb-2">Заголовок персональной новости 3</h3>
+                    <p class="text-gray-700">Краткое описание персональной новости 3...</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white p-6 rounded shadow-md">
+            <h3 class="text-2xl font-bold mb-4">Настройка интересов</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div class="interest-item p-4 border rounded text-center" data-interest="Технологии">Технологии</div>
+                <div class="interest-item p-4 border rounded text-center" data-interest="Спорт">Спорт</div>
+                <div class="interest-item p-4 border rounded text-center" data-interest="Политика">Политика</div>
+                <div class="interest-item p-4 border rounded text-center" data-interest="Наука">Наука</div>
+                <div class="interest-item p-4 border rounded text-center" data-interest="Искусство">Искусство</div>
+                <div class="interest-item p-4 border rounded text-center" data-interest="Кибербезопасность">Кибербезопасность</div>
+                <div class="interest-item p-4 border rounded text-center" data-interest="Искусственный интеллект">Искусственный интеллект</div>
+                <div class="interest-item p-4 border rounded text-center" data-interest="Гаджеты">Гаджеты</div>
+                <div class="interest-item p-4 border rounded text-center" data-interest="Стартапы">Стартапы</div>
+            </div>
+            <button class="bg-blue-600 text-white px-4 py-2 rounded mt-4" id="saveInterestsBtn" type="button">Сохранить</button>
+        </div>
+    </section>
+</main>
+<!-- Registration Modal -->
+<div class="modal" id="registerModal">
+    <div class="modal-content">
+        <span class="close" id="closeRegisterModal">×</span>
+        <h2 class="text-3xl font-bold mb-4">Регистрация</h2>
+        <form class="bg-white p-6 rounded shadow-md">
+            <div class="mb-4">
+                <label class="block text-gray-700" for="username">Имя пользователя</label>
+                <input class="w-full p-2 border border-gray-300 rounded mt-1" id="username" type="text"/>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700" for="email">Электронная почта</label>
+                <input class="w-full p-2 border border-gray-300 rounded mt-1" id="email" type="email"/>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700" for="password">Пароль</label>
+                <input class="w-full p-2 border border-gray-300 rounded mt-1" id="password" type="password"/>
+            </div>
+            <button class="bg-blue-600 text-white px-4 py-2 rounded" type="submit">Зарегистрироваться</button>
+        </form>
+    </div>
+</div>
+<!-- Login Modal -->
+<div class="modal" id="loginModal">
+    <div class="modal-content">
+        <span class="close" id="closeLoginModal">×</span>
+        <h2 class="text-3xl font-bold mb-4">Вход</h2>
+        <form class="bg-white p-6 rounded shadow-md">
+            <div class="mb-4">
+                <label class="block text-gray-700" for="email-login">Электронная почта</label>
+                <input class="w-full p-2 border border-gray-300 rounded mt-1" id="email-login" type="email"/>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700" for="password-login">Пароль</label>
+                <input class="w-full p-2 border border-gray-300 rounded mt-1" id="password-login" type="password"/>
+            </div>
+            <button class="bg-blue-600 text-white px-4 py-2 rounded" type="submit">Войти</button>
+        </form>
+    </div>
+</div>
+<!-- Footer -->
+<footer class="bg-blue-600 text-white p-4 mt-8">
+    <div class="container mx-auto text-center">
+        <p>© 2025 Новостной сайт. Все права защищены.</p>
+    </div>
+</footer>
+<script>
+    // Get the modals
+    var registerModal = document.getElementById("registerModal");
+    var loginModal = document.getElementById("loginModal");
+
+    // Get the buttons that open the modals
+    var registerBtn = document.getElementById("registerBtn");
+    var loginBtn = document.getElementById("loginBtn");
+
+    // Get the <span> elements that close the modals
+    var closeRegisterModal = document.getElementById("closeRegisterModal");
+    var closeLoginModal = document.getElementById("closeLoginModal");
+
+    // When the user clicks the button, open the modal
+    registerBtn.onclick = function() {
+        registerModal.style.display = "block";
+    }
+    loginBtn.onclick = function() {
+        loginModal.style.display = "block";
+    }
+
+    // When the user clicks on <span> (x), close the modal
+    closeRegisterModal.onclick = function() {
+        registerModal.style.display = "none";
+    }
+    closeLoginModal.onclick = function() {
+        loginModal.style.display = "none";
+    }
+
+    // When the user clicks anywhere outside of the modal, close it
+    window.onclick = function(event) {
+        if (event.target == registerModal) {
+            registerModal.style.display = "none";
+        }
+        if (event.target == loginModal) {
+            loginModal.style.display = "none";
+        }
+    }
+
+    // Interest selection
+    var interestItems = document.querySelectorAll('.interest-item');
+    interestItems.forEach(function(item) {
+        item.addEventListener('click', function() {
+            item.classList.toggle('selected');
+        });
+    });
+
+    // Save interests
+    var saveInterestsBtn = document.getElementById('saveInterestsBtn');
+    saveInterestsBtn.addEventListener('click', function() {
+        var selectedInterests = [];
+        interestItems.forEach(function(item) {
+            if (item.classList.contains('selected')) {
+                selectedInterests.push(item.getAttribute('data-interest'));
+            }
+        });
+        alert('Вы выбрали: ' + selectedInterests.join(', '));
+    });
+
+    // Page navigation
+    var homeBtn = document.getElementById('homeBtn');
+    var profileBtn = document.getElementById('profileBtn');
+    var homePage = document.getElementById('home');
+    var profilePage = document.getElementById('profile');
+
+    homeBtn.onclick = function() {
+        homePage.classList.add('active');
+        profilePage.classList.remove('active');
+    }
+
+    profileBtn.onclick = function() {
+        profilePage.classList.add('active');
+        homePage.classList.remove('active');
+    }
+</script>
+</body>
+</html>
