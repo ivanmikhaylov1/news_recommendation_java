@@ -8,10 +8,8 @@ import com.example.demo.domain.dto.response.WebsiteResponse;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
@@ -20,17 +18,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@ExtendWith(SpringExtension.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@TestConfiguration
 @Import(TestContainersConfig.class)
 @ActiveProfiles("test")
 public class EndToEndTest {
@@ -67,12 +62,13 @@ public class EndToEndTest {
 
         CategoryResponse chosenCategory = categoriesResponse.getBody()[0];
 
-        restTemplate.exchange(
-                getAllUrl("/api/categories/" + chosenCategory.getId()),
-                HttpMethod.PUT,
+        ResponseEntity<Void> chooseCategoryResponse = restTemplate.exchange(
+                getAllUrl("/api/subscriptions/categories/" + chosenCategory.getId()),
+                HttpMethod.POST,
                 new HttpEntity<>(headers),
                 Void.class
         );
+        assertEquals(200, chooseCategoryResponse.getStatusCode().value());
 
         ResponseEntity<WebsiteResponse[]> websitesResponse = restTemplate.exchange(
                 getAllUrl("/api/websites"),
@@ -83,12 +79,13 @@ public class EndToEndTest {
         assertEquals(200, websitesResponse.getStatusCode().value());
         WebsiteResponse chosenWebsite = websitesResponse.getBody()[0];
 
-        restTemplate.exchange(
-                getAllUrl("/api/websites/" + chosenWebsite.getId()),
-                HttpMethod.PUT,
+        ResponseEntity<Void> chooseWebsiteResponse = restTemplate.exchange(
+                getAllUrl("/api/subscriptions/websites/" + chosenWebsite.getId()),
+                HttpMethod.POST,
                 new HttpEntity<>(headers),
                 Void.class
         );
+        assertEquals(200, chooseWebsiteResponse.getStatusCode().value());
 
         ResponseEntity<CategoryResponse[]> userCategoriesResponse = restTemplate.exchange(
                 getAllUrl("/api/categories/my"),

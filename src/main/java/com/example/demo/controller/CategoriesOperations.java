@@ -13,37 +13,32 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @Tag(name = "Categories operations", description = "Управление категориями")
-@RequestMapping("/api/categories")
+@RequestMapping("/api")
 public interface CategoriesOperations {
 
   @Operation(summary = "Получить стандартные категории")
   @ApiResponse(responseCode = "200", description = "Список стандартных категорий")
-  @GetMapping
+  @GetMapping("/categories")
   ResponseEntity<List<CategoryResponse>> getDefaultCategories();
 
   @Operation(summary = "Получить пользовательские категории")
   @ApiResponse(responseCode = "200", description = "Список пользовательских категорий")
-  @GetMapping("/my")
+  @GetMapping("/categories/my")
   ResponseEntity<List<CategoryResponse>> getUserCategories();
 
   @Operation(summary = "Создать категорию")
   @ApiResponse(responseCode = "201", description = "Категория создана")
-  @PostMapping
+  @PostMapping("/categories")
   ResponseEntity<CategoryResponse> createCategory(@RequestBody @Valid Category category);
 
   @Operation(summary = "Выбрать категорию")
   @ApiResponse(responseCode = "200", description = "Категория выбрана")
-  @PutMapping("/{categoryId}")
+  @PostMapping("/subscriptions/categories/{categoryId}")
   ResponseEntity<Void> chooseCategory(@PathVariable Long categoryId);
 
   @Operation(summary = "Отмена выбора категории")
   @ApiResponse(responseCode = "200", description = "Выбор отменен")
-  @DeleteMapping("/{categoryId}")
+  @DeleteMapping("/subscriptions/categories/{categoryId}")
   ResponseEntity<Void> removeCategory(@PathVariable Long categoryId);
-
-  @Operation(summary = "Редактирование процента категории")
-  @ApiResponse(responseCode = "200", description = "Изменение сохранено")
-  @PatchMapping("/{categoryId}")
-  ResponseEntity<Void> editCategoryPercent(@PathVariable Long categoryId);
 }
 

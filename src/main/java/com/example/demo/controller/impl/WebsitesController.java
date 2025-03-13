@@ -44,10 +44,4 @@ public class WebsitesController implements WebsitesOperations {
     service.removeWebsite(websiteId);
     return ResponseEntity.ok().build();
   }
-
-  @Override
-  public ResponseEntity<Void> editWebsitePercent(Long websiteId) {
-    //todo
-    return ResponseEntity.ok().build();
-  }
 }

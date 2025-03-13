@@ -7,6 +7,7 @@ import com.example.demo.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -21,42 +22,47 @@ public class CategoriesService {
   private final UsersService usersService;
 
   public List<CategoryResponse> getDefaultCategories() {
-    List<Category> categories = repository.getDefaultCategories();
+    List<Category> categories = repository.findByOwnerIsNull();
     return categories.stream()
         .map(category -> new CategoryResponse(category.getId(), category.getName()))
         .collect(Collectors.toList());
   }
 
+  @Transactional(readOnly = true)
   public List<CategoryResponse> getUserCategories() {
     User user = usersService.getCurrentUser();
-    List<Category> categories = repository.getUserCategories(user);
+    List<Category> categories = repository.findByUsersContaining(user);
     return categories.stream()
         .map(category -> new CategoryResponse(category.getId(), category.getName()))
         .collect(Collectors.toList());
   }
 
+  @Transactional
   public void chooseCategory(Long categoryId) {
     Optional<Category> category = repository.findById(categoryId);
     if (category.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category with this ID not found");
     }
     User user = usersService.getCurrentUser();
-    repository.chooseCategory(user, category.get());
+    user.getCategories().add(category.get());
+    usersService.save(user);
   }
 
+  @Transactional
   public void removeCategory(Long categoryId) {
-    Optional<Category> category = repository.findById(categoryId);
+    User user = usersService.getCurrentUser();
+    Optional<Category> category = repository.findByIdAndUsersContaining(categoryId, user);
     if (category.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category with this ID not found");
     }
-    User user = usersService.getCurrentUser();
-    repository.removeCategory(user, category.get());
+    user.getCategories().remove(category.get());
+    usersService.save(user);
   }
 
   public CategoryResponse createCategory(Category category) {
     User user = usersService.getCurrentUser();
     category.setOwner(user);
-    Category savedCategory = repository.createCategory(category);
-    return new CategoryResponse(savedCategory.getId(), savedCategory.getName());
+    repository.save(category);
+    return new CategoryResponse(category.getId(), category.getName());
   }
 }

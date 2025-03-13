@@ -44,10 +44,4 @@ public class CategoriesController implements CategoriesOperations {
     service.removeCategory(categoryId);
     return ResponseEntity.ok().build();
   }
-
-  @Override
-  public ResponseEntity<Void> editCategoryPercent(Long categoryId) {
-    //todo
-    return ResponseEntity.ok().build();
-  }
 }
