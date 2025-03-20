@@ -1,6 +1,7 @@
 package com.example.demo.configuration;
 
 import com.example.demo.filter.JwtAuthenticationFilter;
+import com.example.demo.filter.StaticTokenAuthenticationFilter;
 import com.example.demo.service.UsersService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -26,6 +27,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfiguration {
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
+  private final StaticTokenAuthenticationFilter staticTokenAuthenticationFilter;
   private final UsersService usersService;
 
   @Bean
@@ -35,12 +37,14 @@ public class SecurityConfiguration {
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/auth/**").permitAll()
             .requestMatchers("/swagger-ui/**", "/swagger-resources/*", "/v3/api-docs/**").permitAll()
+            .requestMatchers("/internal/**").permitAll()
             .anyRequest().authenticated()
         )
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authenticationProvider(authenticationProvider())
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-            .csrf(AbstractHttpConfigurer::disable);
+        .addFilterBefore(staticTokenAuthenticationFilter, JwtAuthenticationFilter.class)
+        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+        .csrf(AbstractHttpConfigurer::disable);
     return http.build();
   }
 

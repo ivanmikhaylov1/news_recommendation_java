@@ -35,3 +35,9 @@ management:
       exposure:
         include: "*"
         exclude: shutdown
+
+bot:
+  url: https://example.com
+  internalToken: token
+  secretKey: m6g1uN9Fp7l+gds+ZriYLCJAKoyMvXr7KNq4bWkYgEQ=
+  botUserName: newrec_bot
