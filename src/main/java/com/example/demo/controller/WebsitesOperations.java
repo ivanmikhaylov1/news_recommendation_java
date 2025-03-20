@@ -32,11 +32,11 @@ public interface WebsitesOperations {
 
   @Operation(summary = "Выбрать веб-сайт")
   @ApiResponse(responseCode = "200", description = "Веб-сайт выбран")
-  @PostMapping("/subscriptions/websites/{websiteId}")
-  ResponseEntity<Void> chooseWebsite(@PathVariable Long websiteId);
+  @PostMapping("/subscriptions/websites")
+  ResponseEntity<Void> chooseWebsite(@RequestParam Long websiteId);
 
   @Operation(summary = "Отмена выбора веб-сайта")
   @ApiResponse(responseCode = "200", description = "Выбор отменен")
-  @DeleteMapping("/subscriptions/websites/{websiteId}")
-  ResponseEntity<Void> removeWebsite(@PathVariable Long websiteId);
+  @DeleteMapping("/subscriptions/websites")
+  ResponseEntity<Void> removeWebsite(@RequestParam Long websiteId);
 }

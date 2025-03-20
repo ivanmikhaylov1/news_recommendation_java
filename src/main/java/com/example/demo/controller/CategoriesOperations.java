@@ -33,12 +33,12 @@ public interface CategoriesOperations {
 
   @Operation(summary = "Выбрать категорию")
   @ApiResponse(responseCode = "200", description = "Категория выбрана")
-  @PostMapping("/subscriptions/categories/{categoryId}")
-  ResponseEntity<Void> chooseCategory(@PathVariable Long categoryId);
+  @PostMapping("/subscriptions/categories")
+  ResponseEntity<Void> chooseCategory(@RequestParam Long categoryId);
 
   @Operation(summary = "Отмена выбора категории")
   @ApiResponse(responseCode = "200", description = "Выбор отменен")
-  @DeleteMapping("/subscriptions/categories/{categoryId}")
-  ResponseEntity<Void> removeCategory(@PathVariable Long categoryId);
+  @DeleteMapping("/subscriptions/categories")
+  ResponseEntity<Void> removeCategory(@RequestParam Long categoryId);
 }
 

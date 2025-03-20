@@ -63,7 +63,7 @@ public class EndToEndTest {
         CategoryResponse chosenCategory = categoriesResponse.getBody()[0];
 
         ResponseEntity<Void> chooseCategoryResponse = restTemplate.exchange(
-                getAllUrl("/api/subscriptions/categories/" + chosenCategory.getId()),
+                getAllUrl("/api/subscriptions/categories?categoryId=" + chosenCategory.getId()),
                 HttpMethod.POST,
                 new HttpEntity<>(headers),
                 Void.class
@@ -80,7 +80,7 @@ public class EndToEndTest {
         WebsiteResponse chosenWebsite = websitesResponse.getBody()[0];
 
         ResponseEntity<Void> chooseWebsiteResponse = restTemplate.exchange(
-                getAllUrl("/api/subscriptions/websites/" + chosenWebsite.getId()),
+                getAllUrl("/api/subscriptions/websites?websiteId=" + chosenWebsite.getId()),
                 HttpMethod.POST,
                 new HttpEntity<>(headers),
                 Void.class
