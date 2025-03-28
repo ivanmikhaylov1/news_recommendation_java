@@ -1,16 +1,12 @@
-CREATE SEQUENCE IF NOT EXISTS user_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS website_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS category_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS article_id_seq START WITH 1 INCREMENT BY 1;
-CREATE SEQUENCE IF NOT EXISTS user_website_status_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS article_reaction_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS user_reaction_id_seq START WITH 1 INCREMENT BY 1;
 
 CREATE TABLE IF NOT EXISTS users
 (
-    user_id  BIGINT PRIMARY KEY DEFAULT nextval('user_id_seq'),
-    username VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255)        NOT NULL
+    user_id  BIGINT UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS websites
@@ -59,16 +55,6 @@ CREATE TABLE IF NOT EXISTS articles
     category_id BIGINT              NOT NULL,
     CONSTRAINT fk_article_website FOREIGN KEY (website_id) REFERENCES websites (website_id),
     CONSTRAINT fk_article_category FOREIGN KEY (category_id) REFERENCES categories (category_id)
-);
-
-CREATE TABLE IF NOT EXISTS user_website_status
-(
-    user_website_status_id BIGINT PRIMARY KEY DEFAULT nextval('user_website_status_id_seq'),
-    user_id                BIGINT NOT NULL,
-    website_id             BIGINT NOT NULL,
-    last_sent_article_date TIMESTAMP,
-    CONSTRAINT fk_user_website_status_user FOREIGN KEY (user_id) REFERENCES users (user_id),
-    CONSTRAINT fk_user_website_status_website FOREIGN KEY (website_id) REFERENCES websites (website_id)
 );
 
 CREATE TABLE IF NOT EXISTS article_reactions
