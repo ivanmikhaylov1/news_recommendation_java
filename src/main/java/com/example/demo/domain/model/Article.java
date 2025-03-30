@@ -8,9 +8,12 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
+import java.util.Set;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -57,8 +60,12 @@ public class Article {
   @Schema(description = "Веб-сайт, на котором опубликована статья")
   private Website website;
 
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "category_id", nullable = false)
-  @Schema(description = "Категория, к которой относится статья")
-  private Category category;
+  @ManyToMany(fetch = FetchType.LAZY)
+  @JoinTable(
+      name = "article_category",
+      joinColumns = @JoinColumn(name = "article_id"),
+      inverseJoinColumns = @JoinColumn(name = "category_id")
+  )
+  @Schema(description = "Категории, к которым относится статья")
+  private Set<Category> categories;
 }

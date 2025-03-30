@@ -1,13 +1,18 @@
 package com.example.demo.parser.sites;
 
+import com.example.demo.domain.dto.ArticleDTO;
+import com.example.demo.parser.BaseParser;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
-import org.example.entity.Article;
-import org.example.parser.BaseParser;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.springframework.stereotype.Component;
 
+@Component
+@Slf4j
 public class InfoqParser extends BaseParser {
   private static final String DOMAIN = "https://www.infoq.com";
   private static final String BLOG_LINK = "https://www.infoq.com/development";
@@ -33,38 +38,38 @@ public class InfoqParser extends BaseParser {
   }
 
   @Override
-  public Article getArticle(String link) {
-    Document page = getPage(DOMAIN + link);
-    return getArticle(link, page);  // Теперь вызываем метод, который принимает уже полученную страницу
+  public Optional<ArticleDTO> getArticle(String link) {
+    Optional<Document> page = getPage(DOMAIN + link);
+    if (page.isEmpty()) {
+      return Optional.empty();
+    }
+    return getArticle(link, page.get());
   }
 
   @Override
-  public Article getArticle(String link, Document page) {
-    Element titleElement = page.selectFirst("h1");
-    Element dateElement = page.selectFirst("p.article__readTime.date");
-    List<Element> contentElements = page.select("p");
+  public Optional<ArticleDTO> getArticle(String link, Document page) {
+    try {
+      Element titleElement = page.select("h1").first();
+      Element dateElement = page.select("p.article__readTime.date").first();
+      List<Element> contentElements = page.select("p");
 
-    String title = titleElement != null ? titleElement.text() : enrichTitle(link);
-    String date = dateElement != null ? dateElement.text() : "Unknown date";
-
-    StringBuilder textBuilder = new StringBuilder();
-    for (Element content : contentElements) {
-      String text = content.text().trim();
-      if (!text.isEmpty()) {
-        textBuilder.append(text).append(" ");
+      StringBuilder textBuilder = new StringBuilder();
+      for (Element content : contentElements) {
+        String text = content.text().trim();
+        if (!text.isEmpty()) {
+          textBuilder.append(text).append(" ");
+        }
       }
-    }
 
-    return new Article(UUID.randomUUID(), title, textBuilder.toString().trim(), date, DOMAIN + link);
-  }
-
-  private String enrichTitle(String link) {
-    String title = link;
-    if (link.contains("articles")) {
-      title = link.replace("https://www.infoq.com/articles/", "").replace("-", " ");
-    } else if (link.contains("news")) {
-      title = link.replace("https://www.infoq.com/news/", "").replace("-", " ");
+      return Optional.ofNullable(ArticleDTO.builder()
+          .name(titleElement.text())
+          .description(textBuilder.toString().trim())
+          .url(link)
+          .date(dateElement.text())
+          .build());
+    } catch (Exception e) {
+      log.error("Parsing error: {}", link, e);
+      return Optional.empty();
     }
-    return Character.toUpperCase(title.charAt(0)) + title.substring(1);
   }
 }

@@ -1,21 +1,27 @@
 package com.example.demo.parser.sites;
 
+import com.example.demo.domain.dto.ArticleDTO;
+import com.example.demo.parser.SiteParse;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
-import org.example.entity.Article;
-import org.example.parser.SiteParse;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
+@Component
+@Slf4j
 public class RSSParser implements SiteParse {
   private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
-  private static final Logger log = LoggerFactory.getLogger(InfoqParser.class);
   private static final int TIMEOUT = 20000;
   private static final int LIMIT_ARTICLES_COUNT = 10;
+
+  @Value("parser.limit")
+  protected Integer limitArticleCount;
 
   private final String link;
 
@@ -24,22 +30,23 @@ public class RSSParser implements SiteParse {
   }
 
   @Override
-  public List<Article> parseLastArticles() {
-    Document page = getPage(link);
+  public List<ArticleDTO> parseLastArticles() {
+    Optional<Document> page = getPage(link);
 
-    return parseLastArticles(page);
+    return parseLastArticles(page.get());
   }
 
-  public List<Article> parseLastArticles(Document page) {
-    List<Article> articles = new ArrayList<>();
+  public List<ArticleDTO> parseLastArticles(Document page) {
+    List<ArticleDTO> articles = new ArrayList<>();
 
     if (page != null) {
       try {
-        Element channel = page.selectFirst("channel");
+        Element channel = page.select("channel").first();
         List<Element> articlesData = channel.select("item");
 
         for (Element articleData : articlesData) {
-          articles.add(getArticle(articleData));
+          Optional<ArticleDTO> article = getArticle(articleData);
+          article.ifPresent(articles::add);
 
           if (articles.size() >=  LIMIT_ARTICLES_COUNT) {
             break;
@@ -52,29 +59,34 @@ public class RSSParser implements SiteParse {
     return articles;
   }
 
-  private Article getArticle(Element item) {
-    Element titleElement = item.selectFirst("title");
-    Element descriptionElement = item.selectFirst("description");
-    Element dateElement = item.selectFirst("pubDate");
-    Element linkElement = item.selectFirst("link");
+  private Optional<ArticleDTO> getArticle(Element item) {
+    try {
+      Element titleElement = item.select("title").first();
+      Element descriptionElement = item.select("description").first();
+      Element dateElement = item.select("pubDate").first();
+      Element linkElement = item.select("link").first();
 
-    String name = titleElement.text();
-    String description = descriptionElement.text();
-    String dateString = dateElement.text();
-    String link = linkElement.text();
-
-    return new Article(UUID.randomUUID(), name,description, dateString, link);
+      return Optional.ofNullable(ArticleDTO.builder()
+          .name(titleElement.text())
+          .description(descriptionElement.text())
+          .url(linkElement.text())
+          .date(dateElement.text())
+          .build());
+    } catch (Exception e) {
+      log.error("Parsing error: {}", link, e);
+      return Optional.empty();
+    }
   }
 
-  private Document getPage(String link) {
+  private Optional<Document> getPage(String link) {
     try {
-      return Jsoup.connect(link)
+      return Optional.ofNullable(Jsoup.connect(link)
           .timeout(TIMEOUT)
           .userAgent(USER_AGENT)
-          .get();
+          .get());
     } catch (Exception e) {
       log.error("Get request error: {}", link, e);
-      return null;
+      return Optional.empty();
     }
   }
 }

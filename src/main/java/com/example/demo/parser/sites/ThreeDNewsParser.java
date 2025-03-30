@@ -1,27 +1,20 @@
 package com.example.demo.parser.sites;
 
 
+import com.example.demo.domain.dto.ArticleDTO;
+import com.example.demo.parser.BaseParser;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
-import org.example.entity.Article;
-import org.example.parser.BaseParser;
+import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.springframework.stereotype.Component;
 
+@Component
+@Slf4j
 public class ThreeDNewsParser extends BaseParser {
   private static final String BLOG_LINK = "https://3dnews.ru";
-
-  private final int limitPageCount;
-
-  public ThreeDNewsParser() {
-    this(10);
-  }
-
-  public ThreeDNewsParser(int limitPageCount) {
-    super();
-    this.limitPageCount = limitPageCount;
-  }
 
   @Override
   protected List<String> getArticleLinks() {
@@ -34,25 +27,27 @@ public class ThreeDNewsParser extends BaseParser {
     List<String> links = new ArrayList<>();
 
     for (Element articleBlock : articleBlocks) {
-      links.add(articleBlock.selectFirst("a").attr("href"));
-
-      if (links.size() == limitPageCount) {
-        break;
-      }
+      links.add(articleBlock.select("a").first().attr("href"));
     }
     return links;
   }
 
   @Override
-  public Article getArticle(String link, Document page) {
-    Element titleElement = page.selectFirst("title");
-    Element descriptionElement = page.selectFirst("div.js-mediator-article p");
-    Element dateElement = page.selectFirst("span.entry-date.tttes");
+  public Optional<ArticleDTO> getArticle(String link, Document page) {
+    try {
+      Element titleElement = page.select("title").first();
+      Element descriptionElement = page.select("div.js-mediator-article p").first();
+      Element dateElement = page.select("span.entry-date.tttes").first();
 
-    String name = titleElement.text();
-    String description = descriptionElement.text();
-    String dateString = dateElement.text().split(",")[0];
-
-    return new Article(UUID.randomUUID(), name, description, dateString, link);
+      return Optional.ofNullable(ArticleDTO.builder()
+          .name(titleElement.text())
+          .description(descriptionElement.text())
+          .url(link)
+          .date(dateElement.text().split(",")[0])
+          .build());
+    } catch (Exception e) {
+      log.error("Parsing error: {}", link, e);
+      return Optional.empty();
+    }
   }
 }

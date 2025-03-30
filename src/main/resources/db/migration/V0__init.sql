@@ -78,3 +78,11 @@ CREATE TABLE IF NOT EXISTS user_reactions
     CONSTRAINT fk_user_reaction_article FOREIGN KEY (article_id) REFERENCES articles (article_id),
     CONSTRAINT unique_user_article_reaction UNIQUE (user_id, article_id)
 );
+
+CREATE TABLE article_category (
+    article_id BIGINT NOT NULL,
+    category_id BIGINT NOT NULL,
+    PRIMARY KEY (article_id, category_id),
+    FOREIGN KEY (article_id) REFERENCES articles (article_id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories (category_id) ON DELETE CASCADE
+);

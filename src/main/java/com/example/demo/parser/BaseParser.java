@@ -1,26 +1,30 @@
 package com.example.demo.parser;
 
+import com.example.demo.domain.dto.ArticleDTO;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import org.example.entity.Article;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 
+@Slf4j
 public abstract class BaseParser implements SiteParse, AutoCloseable {
+  @Value("parser.limit")
+  protected Integer limitArticleCount;
+
   protected static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
   protected static final int THREAD_COUNT = 25;
   protected static final int TIMEOUT = 20000;
   protected static final int THREADS_TIMEOUT = 60000;
 
-  private static final Logger log = LoggerFactory.getLogger(BaseParser.class);
   private ExecutorService executor;
 
   protected BaseParser() {
@@ -28,25 +32,23 @@ public abstract class BaseParser implements SiteParse, AutoCloseable {
   }
 
   @Override
-  public List<Article> parseLastArticles() {
+  public List<ArticleDTO> parseLastArticles() {
     List<String> articleLinks = getArticleLinks();
-    List<Callable<Article>> tasks = new ArrayList<>();
+    List<Callable<Optional<ArticleDTO>>> tasks = new ArrayList<>();
 
     for (String articleLink : articleLinks) {
       tasks.add(() -> getArticle(articleLink));
     }
 
-    List<Article> articles = new ArrayList<>();
+    List<ArticleDTO> articles = new ArrayList<>();
 
     try {
-      List<Future<Article>> results = executor.invokeAll(tasks);
+      List<Future<Optional<ArticleDTO>>> results = executor.invokeAll(tasks);
 
-      for (Future<Article> result : results) {
+      for (Future<Optional<ArticleDTO>> result : results) {
         try {
-          Article article = result.get();
-          if (article != null) {
-            articles.add(article);
-          }
+          Optional<ArticleDTO> article = result.get();
+          article.ifPresent(articles::add);
         } catch (ExecutionException e) {
           log.error("Article parsing error", e);
         }
@@ -62,34 +64,35 @@ public abstract class BaseParser implements SiteParse, AutoCloseable {
   protected abstract List<String> getArticleLinks();
 
   protected List<String> getArticleLinks(String blogLink) {
-    Document page = getPage(blogLink);
-    if (page == null) {
+    Optional<Document> page = getPage(blogLink);
+    if (page.isEmpty()) {
       return List.of();
     }
-    return getArticleLinks(page);
+    List<String> articlesLinks = getArticleLinks(page.get());
+    return articlesLinks.size() > limitArticleCount ? articlesLinks.subList(0, limitArticleCount) : articlesLinks;
   }
 
   protected abstract List<String> getArticleLinks(Document page);
 
-  protected abstract Article getArticle(String link, Document page);
+  protected abstract Optional<ArticleDTO> getArticle(String link, Document page);
 
-  protected Article getArticle(String link) {
-    Document page = getPage(link);
-    if (page == null) {
-      return null;
+  protected Optional<ArticleDTO> getArticle(String link) {
+    Optional<Document> page = getPage(link);
+    if (page.isEmpty()) {
+      return Optional.empty();
     }
-    return getArticle(link, page);
+    return getArticle(link, page.get());
   }
 
-  protected Document getPage(String link) {
+  protected Optional<Document> getPage(String link) {
     try {
-      return Jsoup.connect(link)
+      return Optional.ofNullable(Jsoup.connect(link)
           .timeout(TIMEOUT)
           .userAgent(USER_AGENT)
-          .get();
+          .get());
     } catch (Exception e) {
       log.error("Get request error: {}", link, e);
-      return null;
+      return Optional.empty();
     }
   }
 

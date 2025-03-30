@@ -1,13 +1,17 @@
 package com.example.demo.parser.sites;
 
+import com.example.demo.domain.dto.ArticleDTO;
+import com.example.demo.parser.BaseParser;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
-import org.example.entity.Article;
-import org.example.parser.BaseParser;
+import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.springframework.stereotype.Component;
 
+@Component
+@Slf4j
 public class HiTechParser extends BaseParser {
   private static final String BLOG_LINK = "https://hi-tech.mail.ru/news/";
 
@@ -30,15 +34,21 @@ public class HiTechParser extends BaseParser {
   }
 
   @Override
-  public Article getArticle(String link, Document page) {
-    Element titleElement = page.selectFirst("h1");
-    Element descriptionElement = page.selectFirst("div[data-qa='Text']");
-    Element dateElement = page.selectFirst("time");
+  public Optional<ArticleDTO> getArticle(String link, Document page) {
+    try {
+      Element titleElement = page.select("h1").first();
+      Element descriptionElement = page.select("div[data-qa='Text']").first();
+      Element dateElement = page.select("time").first();
 
-    String title = titleElement != null ? titleElement.text() : "Unknown title";
-    String description = descriptionElement != null ? descriptionElement.text() : "";
-    String date = dateElement != null ? dateElement.attr("datetime") : "Unknown date";
-
-    return new Article(UUID.randomUUID(), title, description, date, link);
+      return Optional.ofNullable(ArticleDTO.builder()
+          .name(titleElement.text())
+          .description(descriptionElement.text())
+          .url(link)
+          .date(dateElement.text())
+          .build());
+    } catch (Exception e) {
+      log.error("Parsing error: {}", link, e);
+      return Optional.empty();
+    }
   }
 }
