@@ -49,12 +49,11 @@ CREATE TABLE IF NOT EXISTS articles
     article_id  BIGINT PRIMARY KEY DEFAULT nextval('article_id_seq'),
     name        VARCHAR(255)        NOT NULL,
     description VARCHAR(2000)       NOT NULL,
+    site_date   VARCHAR(255)        NOT NULL,
     date        TIMESTAMP           NOT NULL,
     url         VARCHAR(255) UNIQUE NOT NULL,
     website_id  BIGINT              NOT NULL,
-    category_id BIGINT              NOT NULL,
-    CONSTRAINT fk_article_website FOREIGN KEY (website_id) REFERENCES websites (website_id),
-    CONSTRAINT fk_article_category FOREIGN KEY (category_id) REFERENCES categories (category_id)
+    CONSTRAINT fk_article_website FOREIGN KEY (website_id) REFERENCES websites (website_id)
 );
 
 CREATE TABLE IF NOT EXISTS article_reactions

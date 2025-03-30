@@ -13,10 +13,4 @@ import java.util.Optional;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
-    @Query("SELECT u.id FROM User u "
-        + "JOIN LEFT u.categories c "
-        + "JOIN LEFT u.websites w "
-        + "WHERE c.id = :#{#article.category.id} "
-        + "AND w.id = :#{#article.website.id}")
-    List<Long> findUserIdsByArticle(@Param("article") Article article);
 }

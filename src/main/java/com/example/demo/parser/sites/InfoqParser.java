@@ -39,11 +39,7 @@ public class InfoqParser extends BaseParser {
 
   @Override
   public Optional<ArticleDTO> getArticle(String link) {
-    Optional<Document> page = getPage(DOMAIN + link);
-    if (page.isEmpty()) {
-      return Optional.empty();
-    }
-    return getArticle(link, page.get());
+    return super.getArticle(DOMAIN + link);
   }
 
   @Override

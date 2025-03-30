@@ -24,13 +24,16 @@ spring:
     enabled: true
     baseline-on-migrate: true
 
-jwt:
-  secret: 53A73E5F1C4E0A2D3B5F2D784E6A1B423D6F247D1F6E5C3A596D635A75327855
-  expiration: 3600000
+  task:
+    scheduling:
+      pool:
+        size: 5
 
 parser:
   limit: 3
-  fixedRate: 36000000
+  maxDescription: 2000
+  fixedRateMain: 36000000
+  fixedRateRSS: 36000000
 
 management:
   endpoints:

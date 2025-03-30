@@ -1,11 +1,12 @@
 package com.example.demo.parser.sites;
 
 import com.example.demo.domain.dto.ArticleDTO;
-import com.example.demo.parser.SiteParse;
+import com.example.demo.parser.SiteParser;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
+
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -15,19 +16,15 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
-public class RSSParser implements SiteParse {
+public class RSSParser implements SiteParser {
   private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
   private static final int TIMEOUT = 20000;
-  private static final int LIMIT_ARTICLES_COUNT = 10;
 
-  @Value("parser.limit")
-  protected Integer limitArticleCount;
+  @Value("${parser.limit}")
+  private Integer limitArticleCount;
 
-  private final String link;
-
-  public RSSParser(String link) {
-    this.link = link;
-  }
+  @Setter
+  private String link;
 
   @Override
   public List<ArticleDTO> parseLastArticles() {
@@ -48,7 +45,7 @@ public class RSSParser implements SiteParse {
           Optional<ArticleDTO> article = getArticle(articleData);
           article.ifPresent(articles::add);
 
-          if (articles.size() >=  LIMIT_ARTICLES_COUNT) {
+          if (articles.size() >=  limitArticleCount) {
             break;
           }
         }

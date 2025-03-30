@@ -13,6 +13,8 @@ import java.util.Optional;
 public interface WebsiteRepository extends JpaRepository<Website, Long> {
   List<Website> findByOwnerIsNull();
 
+  List<Website> findByOwnerIsNotNull();
+
   List<Website> findByUsersContaining(User user);
 
   Optional<Website> findByIdAndUsersContaining(Long id, User user);

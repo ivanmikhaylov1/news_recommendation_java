@@ -43,9 +43,13 @@ public class Article {
   @Schema(description = "Название статьи", example = "Как работать с OpenAPI")
   private String name;
 
-  @Column(nullable = false, length = 2000)
+  @Column(nullable = false)
   @Schema(description = "Описание статьи", example = "Подробный разбор работы с OpenAPI в Spring Boot")
   private String description;
+
+  @Column(name = "site_date", nullable = false)
+  @Schema(description = "Строка даты с сайта", example = "2024-02-20")
+  private String siteDate;
 
   @Column(nullable = false)
   @Schema(description = "Дата публикации", example = "2024-02-20T15:30:00")

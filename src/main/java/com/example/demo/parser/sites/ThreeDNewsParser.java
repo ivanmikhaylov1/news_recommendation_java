@@ -27,9 +27,18 @@ public class ThreeDNewsParser extends BaseParser {
     List<String> links = new ArrayList<>();
 
     for (Element articleBlock : articleBlocks) {
-      links.add(articleBlock.select("a").first().attr("href"));
+      Element linkElement = articleBlock.select("a").first();
+
+      if (linkElement != null) {
+        links.add(linkElement.attr("href"));
+      }
     }
     return links;
+  }
+
+  @Override
+  public Optional<ArticleDTO> getArticle(String link) {
+    return super.getArticle(BLOG_LINK + link);
   }
 
   @Override
