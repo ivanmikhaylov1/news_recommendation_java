@@ -104,6 +104,25 @@
 			<artifactId>jjwt-jackson</artifactId>
 		</dependency>
 
+		<!-- Парсинг -->
+		<dependency>
+			<groupId>org.jsoup</groupId>
+			<artifactId>jsoup</artifactId>
+			<version>1.8.3</version>
+		</dependency>
+
+		<!-- ML -->
+		<dependency>
+			<groupId>com.microsoft.onnxruntime</groupId>
+			<artifactId>onnxruntime</artifactId>
+			<version>1.20.0</version>
+		</dependency>
+		<dependency>
+			<groupId>ai.djl.huggingface</groupId>
+			<artifactId>tokenizers</artifactId>
+			<version>0.32.0</version>
+		</dependency>
+
 		<!-- Тестирование -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

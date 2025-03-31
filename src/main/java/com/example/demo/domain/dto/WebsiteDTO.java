@@ -1,4 +1,4 @@
-package com.example.demo.domain.dto.response;
+package com.example.demo.domain.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
@@ -7,7 +7,7 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 @Schema(description = "Вебсайт (для ответа пользователю)")
-public class WebsiteResponse {
+public class WebsiteDTO {
 
   @Schema(description = "Идентификатор вебсайта", example = "1")
   private Long id;

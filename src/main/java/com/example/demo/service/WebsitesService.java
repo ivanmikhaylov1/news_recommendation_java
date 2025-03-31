@@ -1,8 +1,9 @@
 package com.example.demo.service;
 
-import com.example.demo.domain.dto.response.WebsiteResponse;
+import com.example.demo.domain.dto.WebsiteDTO;
 import com.example.demo.domain.model.User;
 import com.example.demo.domain.model.Website;
+import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.WebsiteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,52 +20,48 @@ import java.util.stream.Collectors;
 public class WebsitesService {
 
   private final WebsiteRepository repository;
-  private final UsersService usersService;
+  private final UserRepository userRepository;
 
   @Transactional(readOnly = true)
-  public List<WebsiteResponse> getDefaultWebsites() {
+  public List<WebsiteDTO> getDefaultWebsites() {
     List<Website> websites = repository.findByOwnerIsNull();
     return websites.stream()
-        .map(website -> new WebsiteResponse(website.getId(), website.getName(), website.getUrl()))
+        .map(website -> new WebsiteDTO(website.getId(), website.getName(), website.getUrl()))
         .collect(Collectors.toList());
   }
 
   @Transactional(readOnly = true)
-  public List<WebsiteResponse> getUserWebsites() {
-    User user = usersService.getCurrentUser();
+  public List<WebsiteDTO> getUserWebsites(User user) {
     List<Website> websites = repository.findByUsersContaining(user);
     return websites.stream()
-        .map(website -> new WebsiteResponse(website.getId(), website.getName(), website.getUrl()))
+        .map(website -> new WebsiteDTO(website.getId(), website.getName(), website.getUrl()))
         .collect(Collectors.toList());
   }
 
   @Transactional
-  public void chooseWebsite(Long websiteId) {
+  public void chooseWebsite(User user, Long websiteId) {
     Optional<Website> website = repository.findById(websiteId);
     if (website.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Website with this ID not found");
     }
-    User user = usersService.getCurrentUser();
     user.getWebsites().add(website.get());
-    usersService.save(user);
+    userRepository.save(user);
   }
 
   @Transactional
-  public void removeWebsite(Long websiteId) {
-    User user = usersService.getCurrentUser();
+  public void removeWebsite(User user, Long websiteId) {
     Optional<Website> website = repository.findByIdAndUsersContaining(websiteId, user);
     if (website.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Website with this ID not found");
     }
     user.getWebsites().remove(website.get());
-    usersService.save(user);
+    userRepository.save(user);
   }
 
   @Transactional
-  public WebsiteResponse createWebsite(Website website) {
-    User user = usersService.getCurrentUser();
+  public WebsiteDTO createWebsite(User user, Website website) {
     website.setOwner(user);
     repository.save(website);
-    return new WebsiteResponse(website.getId(), website.getName(), website.getUrl());
+    return new WebsiteDTO(website.getId(), website.getName(), website.getUrl());
   }
 }

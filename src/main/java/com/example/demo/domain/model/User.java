@@ -17,19 +17,11 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Table(name = "users")
-public class User implements UserDetails {
+public class User {
 
   @Id
-  @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "user_id_seq")
-  @SequenceGenerator(name = "user_id_seq", sequenceName = "user_id_seq", allocationSize = 1)
   @Column(name = "user_id")
   private Long id;
-
-  @Column(unique = true, nullable = false)
-  private String username;
-
-  @Column(nullable = false)
-  private String password;
 
   @ManyToMany(fetch = FetchType.LAZY)
   @JoinTable(
@@ -46,9 +38,4 @@ public class User implements UserDetails {
       inverseJoinColumns = @JoinColumn(name = "website_id")
   )
   private Set<Website> websites = new HashSet<>();
-
-  @Override
-  public Collection<? extends GrantedAuthority> getAuthorities() {
-    return List.of();
-  }
 }
