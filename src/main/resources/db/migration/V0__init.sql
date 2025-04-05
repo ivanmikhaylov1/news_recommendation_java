@@ -6,7 +6,7 @@ CREATE SEQUENCE IF NOT EXISTS user_reaction_id_seq START WITH 1 INCREMENT BY 1;
 
 CREATE TABLE IF NOT EXISTS users
 (
-    user_id  BIGINT UNIQUE
+    user_id BIGINT PRIMARY KEY
 );
 
 CREATE TABLE IF NOT EXISTS websites
@@ -78,8 +78,9 @@ CREATE TABLE IF NOT EXISTS user_reactions
     CONSTRAINT unique_user_article_reaction UNIQUE (user_id, article_id)
 );
 
-CREATE TABLE article_category (
-    article_id BIGINT NOT NULL,
+CREATE TABLE article_category
+(
+    article_id  BIGINT NOT NULL,
     category_id BIGINT NOT NULL,
     PRIMARY KEY (article_id, category_id),
     FOREIGN KEY (article_id) REFERENCES articles (article_id) ON DELETE CASCADE,

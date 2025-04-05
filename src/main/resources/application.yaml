@@ -17,8 +17,8 @@ spring:
       hibernate:
         format_sql: true
     hibernate:
-      dialect: org.hibernate.dialect.PostgresSQLDialect
-      ddl-auto: validate
+      dialect: org.hibernate.dialect.PostgreSQLDialect
+      ddl-auto: update
 
   flyway:
     enabled: true
@@ -42,3 +42,8 @@ management:
       exposure:
         include: "*"
         exclude: shutdown
+
+telegram:
+  bot:
+    name: test_bot
+    token: 8051532563:AAHcJ0JkoNHuxDDjvSLSiPeiaujkQbcFWUY

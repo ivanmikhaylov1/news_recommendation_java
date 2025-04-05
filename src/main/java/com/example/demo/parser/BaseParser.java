@@ -1,19 +1,15 @@
 package com.example.demo.parser;
 
 import com.example.demo.domain.dto.ArticleDTO;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.beans.factory.annotation.Value;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.*;
 
 @Slf4j
 public abstract class BaseParser implements SiteParser, AutoCloseable {
@@ -26,7 +22,7 @@ public abstract class BaseParser implements SiteParser, AutoCloseable {
   @Value("${parser.limit}")
   protected int limitArticleCount;
 
-  private ExecutorService executor;
+  private final ExecutorService executor;
 
   protected BaseParser() {
     executor = Executors.newFixedThreadPool(THREAD_COUNT);

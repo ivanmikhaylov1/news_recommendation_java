@@ -2,14 +2,13 @@ package com.example.demo.parser;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.Setter;
 
+@Getter
 @AllArgsConstructor
 public enum DefaultWebsiteIds {
-  INFOQ(2),
-  THREE_D(3),
-  HI_TECH(1);
+  INFOQ("Infoq"),
+  THREE_D("3Dnews"),
+  HI_TECH("Hi-Tech");
 
-  @Getter
-  private final long id;
+  private final String name;
 }

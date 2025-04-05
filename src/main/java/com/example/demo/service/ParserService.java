@@ -14,21 +14,19 @@ import com.example.demo.repository.ArticlesRepository;
 import com.example.demo.repository.CategoryRepository;
 import com.example.demo.repository.WebsiteRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.awt.print.Pageable;
-import java.beans.Transient;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ParserService {
@@ -53,27 +51,42 @@ public class ParserService {
     SiteParser parser = threeDNewsParser;
 
     for (DefaultWebsiteIds value : DefaultWebsiteIds.values()) {
-      switch (value) {
-        case HI_TECH -> parser = hiTechParser;
-        case INFOQ -> parser = infoqParser;
-        case THREE_D -> parser = threeDNewsParser;
-      }
+      try {
+        switch (value) {
+          case HI_TECH -> parser = hiTechParser;
+          case INFOQ -> parser = infoqParser;
+          case THREE_D -> parser = threeDNewsParser;
+        }
 
-      Optional<Website> website = websiteRepository.findById(value.getId());
-      parseSite(website.get(), parser);
+        Optional<Website> website = websiteRepository.findByName(value.getName());
+        if (website.isPresent()) {
+          parseSite(website.get(), parser);
+        }
+      } catch (Exception e) {
+        log.error("Ошибка при парсинге сайта {}: {}", value, e.getMessage(), e);
+      }
     }
   }
 
   @Scheduled(fixedRateString = "${parser.fixedRateRSS}")
   public void runRSSParser() {
     for (Website website : websiteRepository.findByOwnerIsNotNull()) {
-      rssParser.setLink(website.getUrl());
-      parseSite(website, rssParser);
+      try {
+        String url = website.getUrl();
+        if (url != null && !url.isEmpty() && !url.startsWith("http://") && !url.startsWith("https://")) {
+          url = "https://" + url;
+          log.info("Исправлен URL для сайта {}: {}", website.getName(), url);
+        }
+        rssParser.setLink(url);
+        parseSite(website, rssParser);
+      } catch (Exception e) {
+        log.error("Ошибка при парсинге RSS для сайта {}: {}", website.getUrl(), e.getMessage(), e);
+      }
     }
   }
 
   @Transactional
-  private void parseSite(Website website, SiteParser parser) {
+  protected void parseSite(Website website, SiteParser parser) {
     List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount);
     List<ArticleDTO> articles = parser.parseLastArticles();
 
@@ -111,4 +124,3 @@ public class ParserService {
     return new HashSet<>(categoryRepository.findAll());
   }
 }
-

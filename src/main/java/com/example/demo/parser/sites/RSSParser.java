@@ -2,10 +2,6 @@ package com.example.demo.parser.sites;
 
 import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.parser.SiteParser;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
@@ -13,6 +9,10 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 @Component
 @Slf4j
@@ -45,7 +45,7 @@ public class RSSParser implements SiteParser {
           Optional<ArticleDTO> article = getArticle(articleData);
           article.ifPresent(articles::add);
 
-          if (articles.size() >=  limitArticleCount) {
+          if (articles.size() >= limitArticleCount) {
             break;
           }
         }
@@ -77,6 +77,14 @@ public class RSSParser implements SiteParser {
 
   private Optional<Document> getPage(String link) {
     try {
+      if (link == null || link.trim().isEmpty()) {
+        return Optional.empty();
+      }
+
+      if (!link.startsWith("http://") && !link.startsWith("https://")) {
+        return Optional.empty();
+      }
+
       return Optional.ofNullable(Jsoup.connect(link)
           .timeout(TIMEOUT)
           .userAgent(USER_AGENT)

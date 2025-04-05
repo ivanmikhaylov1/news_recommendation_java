@@ -6,8 +6,10 @@ import com.example.demo.domain.model.User;
 import com.example.demo.repository.CategoryRepository;
 import com.example.demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -17,6 +19,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CategoriesService {
 
   private final CategoryRepository repository;
@@ -37,29 +40,48 @@ public class CategoriesService {
         .collect(Collectors.toList());
   }
 
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void chooseCategory(User user, Long categoryId) {
-    Optional<Category> category = repository.findById(categoryId);
-    if (category.isEmpty()) {
+    Optional<Category> categoryOpt = repository.findById(categoryId);
+    if (categoryOpt.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category with this ID not found");
     }
-    user.getCategories().add(category.get());
-    userRepository.save(user);
+
+    Category category = categoryOpt.get();
+    User freshUser = userRepository.findById(user.getId())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+    if (freshUser.getCategories() == null) {
+      freshUser.setCategories(new java.util.HashSet<>());
+    }
+
+    freshUser.getCategories().add(category);
+    userRepository.save(freshUser);
   }
 
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void removeCategory(User user, Long categoryId) {
-    Optional<Category> category = repository.findByIdAndUsersContaining(categoryId, user);
-    if (category.isEmpty()) {
+    Optional<Category> categoryOpt = repository.findByIdAndUsersContaining(categoryId, user);
+    if (categoryOpt.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category with this ID not found");
     }
-    user.getCategories().remove(category.get());
-    userRepository.save(user);
+
+    Category category = categoryOpt.get();
+    User freshUser = userRepository.findById(user.getId())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+    freshUser.getCategories().remove(category);
+    userRepository.save(freshUser);
   }
 
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public CategoryDTO createCategory(User user, Category category) {
-    category.setOwner(user);
-    repository.save(category);
-    return new CategoryDTO(category.getId(), category.getName());
+    User freshUser = userRepository.findById(user.getId())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+    category.setOwner(freshUser);
+    Category savedCategory = repository.save(category);
+
+    return new CategoryDTO(savedCategory.getId(), savedCategory.getName());
   }
 }
