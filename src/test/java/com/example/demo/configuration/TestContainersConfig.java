@@ -8,19 +8,19 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @TestConfiguration
 public class TestContainersConfig {
 
-    private static final PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:15")
-            .withDatabaseName("testdb")
-            .withUsername("test")
-            .withPassword("test");
+  private static final PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:15")
+      .withDatabaseName("testdb")
+      .withUsername("test")
+      .withPassword("test");
 
-    static {
-        postgresContainer.start();
-    }
+  static {
+    postgresContainer.start();
+  }
 
-    @DynamicPropertySource
-    static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
-        registry.add("spring.datasource.username", postgresContainer::getUsername);
-        registry.add("spring.datasource.password", postgresContainer::getPassword);
-    }
+  @DynamicPropertySource
+  static void registerProperties(DynamicPropertyRegistry registry) {
+    registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
+    registry.add("spring.datasource.username", postgresContainer::getUsername);
+    registry.add("spring.datasource.password", postgresContainer::getPassword);
+  }
 }

@@ -6,8 +6,10 @@ import com.example.demo.domain.model.Website;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.WebsiteRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -17,6 +19,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class WebsitesService {
 
   private final WebsiteRepository repository;
@@ -38,30 +41,56 @@ public class WebsitesService {
         .collect(Collectors.toList());
   }
 
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void chooseWebsite(User user, Long websiteId) {
-    Optional<Website> website = repository.findById(websiteId);
-    if (website.isEmpty()) {
+    log.info("Добавление сайта с ID {} для пользователя с ID {}", websiteId, user.getId());
+
+    Optional<Website> websiteOpt = repository.findById(websiteId);
+    if (websiteOpt.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Website with this ID not found");
     }
-    user.getWebsites().add(website.get());
-    userRepository.save(user);
+
+    Website website = websiteOpt.get();
+    User freshUser = userRepository.findById(user.getId())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+    if (freshUser.getWebsites() == null) {
+      freshUser.setWebsites(new java.util.HashSet<>());
+    }
+
+    freshUser.getWebsites().add(website);
+    userRepository.save(freshUser);
+    log.info("Сайт с ID {} успешно добавлен пользователю с ID {}", websiteId, user.getId());
   }
 
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void removeWebsite(User user, Long websiteId) {
-    Optional<Website> website = repository.findByIdAndUsersContaining(websiteId, user);
-    if (website.isEmpty()) {
+    log.info("Удаление сайта с ID {} для пользователя с ID {}", websiteId, user.getId());
+
+    Optional<Website> websiteOpt = repository.findByIdAndUsersContaining(websiteId, user);
+    if (websiteOpt.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Website with this ID not found");
     }
-    user.getWebsites().remove(website.get());
-    userRepository.save(user);
+
+    Website website = websiteOpt.get();
+    User freshUser = userRepository.findById(user.getId())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+    freshUser.getWebsites().remove(website);
+    userRepository.save(freshUser);
+    log.info("Сайт с ID {} успешно удален у пользователя с ID {}", websiteId, user.getId());
   }
 
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public WebsiteDTO createWebsite(User user, Website website) {
-    website.setOwner(user);
-    repository.save(website);
-    return new WebsiteDTO(website.getId(), website.getName(), website.getUrl());
+    log.info("Создание нового сайта '{}' пользователем с ID {}", website.getName(), user.getId());
+    User freshUser = userRepository.findById(user.getId())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+    website.setOwner(freshUser);
+    Website savedWebsite = repository.save(website);
+    log.info("Сайт '{}' успешно создан с ID {}", website.getName(), savedWebsite.getId());
+
+    return new WebsiteDTO(savedWebsite.getId(), savedWebsite.getName(), savedWebsite.getUrl());
   }
 }

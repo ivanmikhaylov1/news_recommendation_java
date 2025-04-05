@@ -18,4 +18,6 @@ public interface WebsiteRepository extends JpaRepository<Website, Long> {
   List<Website> findByUsersContaining(User user);
 
   Optional<Website> findByIdAndUsersContaining(Long id, User user);
+
+  Optional<Website> findByName(String name);
 }

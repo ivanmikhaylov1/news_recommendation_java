@@ -1,17 +1,15 @@
 package com.example.demo.domain.model;
 
 import jakarta.persistence.*;
-import lombok.*;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 @Entity
-@Builder
 @Getter
 @Setter
 @NoArgsConstructor
@@ -23,7 +21,10 @@ public class User {
   @Column(name = "user_id")
   private Long id;
 
-  @ManyToMany(fetch = FetchType.LAZY)
+  @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+  private Set<NotificationSchedule> notificationSchedules = new HashSet<>();
+
+  @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
   @JoinTable(
       name = "user_categories",
       joinColumns = @JoinColumn(name = "user_id"),
@@ -31,11 +32,30 @@ public class User {
   )
   private Set<Category> categories = new HashSet<>();
 
-  @ManyToMany(fetch = FetchType.LAZY)
+  @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
   @JoinTable(
       name = "user_websites",
       joinColumns = @JoinColumn(name = "user_id"),
       inverseJoinColumns = @JoinColumn(name = "website_id")
   )
   private Set<Website> websites = new HashSet<>();
+
+  @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
+  private Set<Category> ownedCategories = new HashSet<>();
+
+  @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
+  private Set<Website> ownedWebsites = new HashSet<>();
+
+  public static User createUser(Long id) {
+    User user = new User();
+    user.setId(id);
+    return user;
+  }
+
+  public NotificationSchedule getActiveSchedule() {
+    return this.notificationSchedules.stream()
+        .filter(NotificationSchedule::getIsActive)
+        .findFirst()
+        .orElse(null);
+  }
 }
