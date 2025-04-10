@@ -3,6 +3,7 @@ package com.example.demo.parser.sites;
 
 import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.parser.BaseParser;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -15,6 +16,9 @@ import java.util.Optional;
 @Component
 @Slf4j
 public class ThreeDNewsParser extends BaseParser {
+  @Getter
+  private static final String NAME = "3Dnews";
+
   private static final String BLOG_LINK = "https://3dnews.ru";
 
   @Override

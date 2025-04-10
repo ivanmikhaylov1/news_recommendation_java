@@ -6,6 +6,7 @@ import com.example.demo.domain.model.User;
 import com.example.demo.repository.ArticlesRepository;
 import com.example.demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jvnet.hk2.annotations.Service;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -15,6 +16,7 @@ import java.time.LocalTime;
 import java.util.List;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class NotificationService {
     private static final String NOTIFY_TEXT = """
@@ -42,12 +44,14 @@ public class NotificationService {
             List<User> users = userRepository.findUsersForArticle(article, currentHour);
 
             for (User user : users) {
-                sendNotification(article, user.);
+                user.setLastSubmittedArticleId(article.getId());
+                userRepository.save(user);
+                sendNotification(article, user.getId());
             }
         }
     }
 
-    private void sendNotification(Article article, Long userId) throws TelegramApiException {
+    private void sendNotification(Article article, Long userId) {
         String message = NOTIFY_TEXT
                 .replace("${title}", article.getName())
                 .replace("${description}", article.getDescription())
@@ -59,6 +63,10 @@ public class NotificationService {
         sendMessage.setText(message);
         sendMessage.setParseMode("HTML");
 
-        bot.execute(sendMessage);
+        try {
+            bot.execute(sendMessage);
+        } catch (TelegramApiException e) {
+            log.error("Ошибка при отправки статьи: {}", e.getMessage());
+        }
     }
 }

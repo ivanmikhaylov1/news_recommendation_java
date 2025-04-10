@@ -4,12 +4,8 @@ import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.domain.model.Article;
 import com.example.demo.domain.model.Category;
 import com.example.demo.domain.model.Website;
-import com.example.demo.parser.DefaultWebsiteIds;
+import com.example.demo.parser.BaseParser;
 import com.example.demo.parser.RSSParser;
-import com.example.demo.parser.SiteParser;
-import com.example.demo.parser.sites.HiTechParser;
-import com.example.demo.parser.sites.InfoqParser;
-import com.example.demo.parser.sites.ThreeDNewsParser;
 import com.example.demo.repository.ArticlesRepository;
 import com.example.demo.repository.CategoryRepository;
 import com.example.demo.repository.WebsiteRepository;
@@ -18,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -34,9 +29,7 @@ public class ParserService {
   private final CategoryRepository categoryRepository;
   private final WebsiteRepository websiteRepository;
 
-  private final HiTechParser hiTechParser;
-  private final InfoqParser infoqParser;
-  private final ThreeDNewsParser threeDNewsParser;
+  private final List<BaseParser> baseParsers;
 
   private final RSSParser rssParser;
 
@@ -48,22 +41,12 @@ public class ParserService {
 
   @Scheduled(fixedRateString = "${parser.fixedRateMain}")
   public void runMainParsers() {
-    SiteParser parser = threeDNewsParser;
-
-    for (DefaultWebsiteIds value : DefaultWebsiteIds.values()) {
+    for (BaseParser parser : baseParsers) {
       try {
-        switch (value) {
-          case HI_TECH -> parser = hiTechParser;
-          case INFOQ -> parser = infoqParser;
-          case THREE_D -> parser = threeDNewsParser;
-        }
-
-        Optional<Website> website = websiteRepository.findByNameAndOwnerIsNull(value.getName());
-        if (website.isPresent()) {
-          parseSite(website.get(), parser);
-        }
+        Optional<Website> website = websiteRepository.findByNameAndOwnerIsNull(parser.getNAME());
+        website.ifPresent(value -> parseSite(value, parser));
       } catch (Exception e) {
-        log.error("Ошибка при парсинге сайта {}: {}", value, e.getMessage(), e);
+        log.error("Ошибка при парсинге сайта {}: {}", parser.getNAME(), e.getMessage(), e);
       }
     }
   }
@@ -93,8 +76,7 @@ public class ParserService {
     }
   }
 
-  @Transactional
-  protected void parseSite(Website website, SiteParser parser) {
+  protected void parseSite(Website website, BaseParser parser) {
     List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount);
     List<String> newArticlesUrls = parser.getArticleLinks();
 

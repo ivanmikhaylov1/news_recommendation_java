@@ -1,6 +1,7 @@
 package com.example.demo.parser;
 
 import com.example.demo.domain.dto.ArticleDTO;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -11,6 +12,8 @@ import java.util.Optional;
 
 @Slf4j
 public abstract class BaseParser implements SiteParser {
+  @Getter
+  protected String NAME;
 
   protected static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
   protected static final int TIMEOUT = 20000;

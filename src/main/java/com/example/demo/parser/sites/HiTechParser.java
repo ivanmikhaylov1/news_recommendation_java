@@ -2,6 +2,7 @@ package com.example.demo.parser.sites;
 
 import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.parser.BaseParser;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -14,6 +15,9 @@ import java.util.Optional;
 @Component
 @Slf4j
 public class HiTechParser extends BaseParser {
+  @Getter
+  private static final String NAME = "Hi-Tech";
+
   private static final String BLOG_LINK = "https://hi-tech.mail.ru/news/";
 
   @Override
