@@ -5,10 +5,10 @@ import com.example.demo.domain.model.Article;
 import com.example.demo.domain.model.Category;
 import com.example.demo.domain.model.Website;
 import com.example.demo.parser.DefaultWebsiteIds;
+import com.example.demo.parser.RSSParser;
 import com.example.demo.parser.SiteParser;
 import com.example.demo.parser.sites.HiTechParser;
 import com.example.demo.parser.sites.InfoqParser;
-import com.example.demo.parser.sites.RSSParser;
 import com.example.demo.parser.sites.ThreeDNewsParser;
 import com.example.demo.repository.ArticlesRepository;
 import com.example.demo.repository.CategoryRepository;
@@ -58,7 +58,7 @@ public class ParserService {
           case THREE_D -> parser = threeDNewsParser;
         }
 
-        Optional<Website> website = websiteRepository.findByName(value.getName());
+        Optional<Website> website = websiteRepository.findByNameAndOwnerIsNull(value.getName());
         if (website.isPresent()) {
           parseSite(website.get(), parser);
         }
@@ -78,7 +78,15 @@ public class ParserService {
           log.info("Исправлен URL для сайта {}: {}", website.getName(), url);
         }
         rssParser.setLink(url);
-        parseSite(website, rssParser);
+
+        List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount);
+        List<ArticleDTO> articles = rssParser.parseLastArticles();
+
+        for (ArticleDTO articleDTO : articles) {
+          if (!oldArticlesUrls.contains(articleDTO.getUrl())) {
+            saveArticle(articleDTO, website);
+          }
+        }
       } catch (Exception e) {
         log.error("Ошибка при парсинге RSS для сайта {}: {}", website.getUrl(), e.getMessage(), e);
       }
@@ -88,15 +96,22 @@ public class ParserService {
   @Transactional
   protected void parseSite(Website website, SiteParser parser) {
     List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount);
-    List<ArticleDTO> articles = parser.parseLastArticles();
+    List<String> newArticlesUrls = parser.getArticleLinks();
 
+    for (String newArticleUrl : newArticlesUrls) {
+      if (!oldArticlesUrls.contains(newArticleUrl)) {
+        Optional<ArticleDTO> article = parser.getArticle(newArticleUrl);
+
+        article.ifPresent(articleDTO -> saveArticle(articleDTO, website));
+      }
+    }
+  }
+
+  private void saveArticle(ArticleDTO articleDTO, Website website) {
     LocalDateTime now = LocalDateTime.now();
+    Set<Category> categories = getTextCategories(articleDTO.getDescription());
 
-    for (ArticleDTO articleDTO : articles) {
-      if (!oldArticlesUrls.contains(articleDTO.getUrl())) {
-        Set<Category> categories = getTextCategories(articleDTO.getDescription());
-
-        Article article = Article.builder()
+    Article article = Article.builder()
             .name(articleDTO.getName())
             .url(articleDTO.getUrl())
             .description(cutDescription(articleDTO.getDescription()))
@@ -106,9 +121,7 @@ public class ParserService {
             .categories(categories)
             .build();
 
-        articlesRepository.save(article);
-      }
-    }
+    articlesRepository.save(article);
   }
 
   private String cutDescription(String description) {

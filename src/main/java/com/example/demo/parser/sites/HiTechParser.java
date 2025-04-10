@@ -17,7 +17,7 @@ public class HiTechParser extends BaseParser {
   private static final String BLOG_LINK = "https://hi-tech.mail.ru/news/";
 
   @Override
-  protected List<String> getArticleLinks() {
+  public List<String> getArticleLinks() {
     return getArticleLinks(BLOG_LINK);
   }
 

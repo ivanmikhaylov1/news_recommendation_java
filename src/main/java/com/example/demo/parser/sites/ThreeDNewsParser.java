@@ -18,7 +18,7 @@ public class ThreeDNewsParser extends BaseParser {
   private static final String BLOG_LINK = "https://3dnews.ru";
 
   @Override
-  protected List<String> getArticleLinks() {
+  public List<String> getArticleLinks() {
     return getArticleLinks(BLOG_LINK);
   }
 

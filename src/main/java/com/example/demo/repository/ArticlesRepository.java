@@ -10,9 +10,9 @@ import java.util.List;
 
 @Repository
 public interface ArticlesRepository extends JpaRepository<Article, Long> {
-  @Query("SELECT a.url FROM Article a "
-      + "WHERE a.website.id = :websiteId "
-      + "ORDER BY a.date DESC " +
-      "LIMIT :count")
+  @Query("SELECT a.url FROM Article a WHERE a.website.id = :websiteId ORDER BY a.date DESC LIMIT :count")
   List<String> getLastArticles(@Param("websiteId") Long websiteId, @Param("count") Integer count);
+
+  @Query("SELECT DISTINCT a FROM Article a WHERE a.id > :minId")
+  List<Article> findByMinId(@Param("minId") Long minId);
 }

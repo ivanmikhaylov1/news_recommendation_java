@@ -18,7 +18,7 @@ public class InfoqParser extends BaseParser {
   private static final String BLOG_LINK = "https://www.infoq.com/development";
 
   @Override
-  protected List<String> getArticleLinks() {
+  public List<String> getArticleLinks() {
     return getArticleLinks(BLOG_LINK);
   }
 
