@@ -2,17 +2,18 @@ package com.example.demo.service;
 
 import com.example.demo.bot.TelegramBot;
 import com.example.demo.domain.model.Article;
+import com.example.demo.domain.model.Category;
 import com.example.demo.domain.model.User;
 import com.example.demo.repository.ArticlesRepository;
 import com.example.demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jvnet.hk2.annotations.Service;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.time.LocalTime;
 import java.util.List;
 
 @Service
@@ -26,22 +27,23 @@ public class NotificationService {
             
             Дата публикации: <i>${date}</i>
             
-            <a href="${url}">Читать подробнее</a>""";
+            <a href="${url}">Читать подробнее</a>
+            
+            ${tags}""";
 
     private final TelegramBot bot;
 
     private final UserRepository userRepository;
     private final ArticlesRepository articlesRepository;
 
-    @Scheduled(initialDelayString = "${parser.fixedRateMain}", fixedRateString = "${parser.fixedRateMain}")
-    private void sendNotification() {
-        Long minId = userRepository.getMinLastSubmittedArticleId();
+    @Scheduled(fixedRateString = "${parser.fixedRateMain}")
+    @Transactional
+    protected void sendNotification() {
+        Long minId = userRepository.getMaxLastSubmittedArticleId();
         List<Article> articles = articlesRepository.findByMinId(minId);
 
         for (Article article : articles) {
-            Integer currentHour = LocalTime.now().getHour();
-
-            List<User> users = userRepository.findUsersForArticle(article, currentHour);
+            List<User> users = userRepository.findUsersForArticle(article);
 
             for (User user : users) {
                 user.setLastSubmittedArticleId(article.getId());
@@ -56,7 +58,8 @@ public class NotificationService {
                 .replace("${title}", article.getName())
                 .replace("${description}", article.getDescription())
                 .replace("${date}", article.getSiteDate())
-                .replace("${url}", article.getUrl());
+                .replace("${url}", article.getUrl())
+                .replace("${tags}", getArticleTags(article));
 
         SendMessage sendMessage = new SendMessage();
         sendMessage.setChatId(userId);
@@ -68,5 +71,15 @@ public class NotificationService {
         } catch (TelegramApiException e) {
             log.error("Ошибка при отправки статьи: {}", e.getMessage());
         }
+    }
+
+    private String getArticleTags(Article article) {
+        StringBuilder tags = new StringBuilder();
+
+        for (Category category : article.getCategories()) {
+            tags.append("#").append(category.getName().toLowerCase()
+                    .replace(" ", ""));
+        }
+        return tags.toString();
     }
 }

@@ -20,6 +20,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -51,7 +53,7 @@ public class ParserService {
     }
   }
 
-  @Scheduled(fixedRateString = "${parser.fixedRateRSS}")
+  //  @Scheduled(fixedRateString = "${parser.fixedRateRSS}")
   public void runRSSParser() {
     for (Website website : websiteRepository.findByOwnerIsNotNull()) {
       try {
@@ -77,15 +79,20 @@ public class ParserService {
   }
 
   protected void parseSite(Website website, BaseParser parser) {
-    List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount);
-    List<String> newArticlesUrls = parser.getArticleLinks();
+    List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount + 10);
 
-    for (String newArticleUrl : newArticlesUrls) {
-      if (!oldArticlesUrls.contains(newArticleUrl)) {
-        Optional<ArticleDTO> article = parser.getArticle(newArticleUrl);
+    try {
+      List<String> newArticlesUrls = parser.getArticleLinks();
 
-        article.ifPresent(articleDTO -> saveArticle(articleDTO, website));
+      for (String newArticleUrl : newArticlesUrls) {
+        if (!oldArticlesUrls.contains(newArticleUrl)) {
+          Optional<ArticleDTO> article = parser.getArticle(newArticleUrl);
+
+          article.ifPresent(articleDTO -> saveArticle(articleDTO, website));
+        }
       }
+    } catch (Exception e) {
+      log.error("Ошибка при парсинге сайта {}: {}", website.getUrl(), e.getMessage(), e);
     }
   }
 
@@ -107,11 +114,24 @@ public class ParserService {
   }
 
   private String cutDescription(String description) {
-    if (description.length() > maxDescription) {
-      //todo сделать сокращение с помощью регулярок
-      return description.substring(0, maxDescription);
+    if (description.length() <= maxDescription) {
+      return description;
     }
-    return description;
+
+    Pattern pattern = Pattern.compile("\\.(?=\\s|$)");
+    Matcher matcher = pattern.matcher(description.substring(0, maxDescription));
+
+    int lastDotIndex = -1;
+    while (matcher.find()) {
+      lastDotIndex = matcher.end();
+    }
+
+    if (lastDotIndex != -1) {
+      return description.substring(0, lastDotIndex).trim();
+    } else {
+      int lastSpace = description.substring(0, maxDescription).lastIndexOf(" ");
+      return description.substring(0, lastSpace > 0 ? lastSpace : maxDescription).trim();
+    }
   }
 
   private Set<Category> getTextCategories(String text) {

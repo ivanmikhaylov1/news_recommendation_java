@@ -16,7 +16,7 @@ import java.util.Optional;
 @Slf4j
 public class InfoqParser extends BaseParser {
   @Getter
-  private static final String NAME = "Infoq";
+  private final String NAME = "Infoq";
 
   private static final String DOMAIN = "https://www.infoq.com";
   private static final String BLOG_LINK = "https://www.infoq.com/development";

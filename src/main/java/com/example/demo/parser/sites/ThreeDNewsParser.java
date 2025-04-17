@@ -17,7 +17,7 @@ import java.util.Optional;
 @Slf4j
 public class ThreeDNewsParser extends BaseParser {
   @Getter
-  private static final String NAME = "3Dnews";
+  private final String NAME = "3Dnews";
 
   private static final String BLOG_LINK = "https://3dnews.ru";
 
@@ -51,7 +51,7 @@ public class ThreeDNewsParser extends BaseParser {
     try {
       Element titleElement = page.select("title").first();
       Element descriptionElement = page.select("div.js-mediator-article p").first();
-      Element dateElement = page.select("span.entry-date.tttes").first();
+      Element dateElement = page.select("span.entry-date strong").first();
 
       return Optional.ofNullable(ArticleDTO.builder()
           .name(titleElement.text())

@@ -15,7 +15,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query(value = """
             SELECT 
-                COALESCE(MIN(u.lastSubmittedArticleId), 0)
+                COALESCE(MAX(u.lastSubmittedArticleId), 0)
             FROM 
                 User u
             WHERE 
@@ -23,30 +23,21 @@ public interface UserRepository extends JpaRepository<User, Long> {
                 AND SIZE(u.categories) > 0
                 AND SIZE(u.websites) > 0
             """)
-    Long getMinLastSubmittedArticleId();
+    Long getMaxLastSubmittedArticleId();
 
-    @Query("""
-            SELECT DISTINCT u
-            FROM User u
-            JOIN u.categories uc
-            JOIN Article a
-            JOIN a.categories ac
-            WHERE 
-                a = :article
-                AND (u.lastSubmittedArticleId IS NULL OR u.lastSubmittedArticleId <= a.id)
-                AND a.website MEMBER OF u.websites
-                AND ac IN ELEMENTS(u.categories)
-                AND (
-                    u.notificationSchedules IS EMPTY OR
-                    EXISTS (
-                        SELECT 1
-                        FROM NotificationSchedule ns
-                        WHERE ns.user = u
-                          AND ns.isActive = TRUE
-                          AND :hour BETWEEN ns.startHour AND ns.endHour
-                    )
-                )
-            """)
-    List<User> findUsersForArticle(@Param("article") Article article, @Param("hour") Integer hour);
+    @Query(value = """
+                SELECT u.*
+                FROM users u
+                JOIN user_websites uw ON u.user_id = uw.user_id
+                WHERE uw.website_id = :#{#article.website.id}
+                  AND (u.last_submitted_article_id IS NULL OR u.last_submitted_article_id < :#{#article.id})
+                  AND u.user_id IN (
+                      SELECT DISTINCT uc.user_id
+                      FROM user_categories uc
+                      JOIN article_category ac ON uc.category_id = ac.category_id
+                      WHERE ac.article_id = :#{#article.id}
+                  )
+            """, nativeQuery = true)
+    List<User> findUsersForArticle(@Param("article") Article article);
 }
 
