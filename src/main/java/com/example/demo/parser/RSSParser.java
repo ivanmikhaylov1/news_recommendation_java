@@ -1,7 +1,6 @@
-package com.example.demo.parser.sites;
+package com.example.demo.parser;
 
 import com.example.demo.domain.dto.ArticleDTO;
-import com.example.demo.parser.SiteParser;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
@@ -16,7 +15,7 @@ import java.util.Optional;
 
 @Component
 @Slf4j
-public class RSSParser implements SiteParser {
+public class RSSParser {
   private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
   private static final int TIMEOUT = 20000;
 
@@ -26,7 +25,6 @@ public class RSSParser implements SiteParser {
   @Setter
   private String link;
 
-  @Override
   public List<ArticleDTO> parseLastArticles() {
     Optional<Document> page = getPage(link);
 

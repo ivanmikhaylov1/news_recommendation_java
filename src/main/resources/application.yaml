@@ -32,8 +32,8 @@ spring:
 parser:
   limit: 3
   maxDescription: 2000
-  fixedRateMain: 36000000
-  fixedRateRSS: 36000000
+  fixedRateMain: 600000
+  fixedRateRSS: 600000
 
 management:
   endpoints:
@@ -45,5 +45,5 @@ management:
 
 telegram:
   bot:
-    name: test_bot
-    token: 8051532563:AAHcJ0JkoNHuxDDjvSLSiPeiaujkQbcFWUY
+    name: ttestpython_bot
+    token: 6481641133:AAFCJ3MNNtM0ZnygPFh3cmUpwSIUF3PzOvA

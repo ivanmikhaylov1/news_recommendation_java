@@ -2,6 +2,7 @@ package com.example.demo.parser.sites;
 
 import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.parser.BaseParser;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -14,11 +15,14 @@ import java.util.Optional;
 @Component
 @Slf4j
 public class InfoqParser extends BaseParser {
+  @Getter
+  private final String NAME = "Infoq";
+
   private static final String DOMAIN = "https://www.infoq.com";
   private static final String BLOG_LINK = "https://www.infoq.com/development";
 
   @Override
-  protected List<String> getArticleLinks() {
+  public List<String> getArticleLinks() {
     return getArticleLinks(BLOG_LINK);
   }
 

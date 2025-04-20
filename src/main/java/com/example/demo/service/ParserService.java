@@ -4,12 +4,8 @@ import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.domain.model.Article;
 import com.example.demo.domain.model.Category;
 import com.example.demo.domain.model.Website;
-import com.example.demo.parser.DefaultWebsiteIds;
-import com.example.demo.parser.SiteParser;
-import com.example.demo.parser.sites.HiTechParser;
-import com.example.demo.parser.sites.InfoqParser;
-import com.example.demo.parser.sites.RSSParser;
-import com.example.demo.parser.sites.ThreeDNewsParser;
+import com.example.demo.parser.BaseParser;
+import com.example.demo.parser.RSSParser;
 import com.example.demo.repository.ArticlesRepository;
 import com.example.demo.repository.CategoryRepository;
 import com.example.demo.repository.WebsiteRepository;
@@ -18,13 +14,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -34,9 +31,7 @@ public class ParserService {
   private final CategoryRepository categoryRepository;
   private final WebsiteRepository websiteRepository;
 
-  private final HiTechParser hiTechParser;
-  private final InfoqParser infoqParser;
-  private final ThreeDNewsParser threeDNewsParser;
+  private final List<BaseParser> baseParsers;
 
   private final RSSParser rssParser;
 
@@ -48,27 +43,17 @@ public class ParserService {
 
   @Scheduled(fixedRateString = "${parser.fixedRateMain}")
   public void runMainParsers() {
-    SiteParser parser = threeDNewsParser;
-
-    for (DefaultWebsiteIds value : DefaultWebsiteIds.values()) {
+    for (BaseParser parser : baseParsers) {
       try {
-        switch (value) {
-          case HI_TECH -> parser = hiTechParser;
-          case INFOQ -> parser = infoqParser;
-          case THREE_D -> parser = threeDNewsParser;
-        }
-
-        Optional<Website> website = websiteRepository.findByName(value.getName());
-        if (website.isPresent()) {
-          parseSite(website.get(), parser);
-        }
+        Optional<Website> website = websiteRepository.findByNameAndOwnerIsNull(parser.getNAME());
+        website.ifPresent(value -> parseSite(value, parser));
       } catch (Exception e) {
-        log.error("Ошибка при парсинге сайта {}: {}", value, e.getMessage(), e);
+        log.error("Ошибка при парсинге сайта {}: {}", parser.getNAME(), e.getMessage(), e);
       }
     }
   }
 
-  @Scheduled(fixedRateString = "${parser.fixedRateRSS}")
+  //  @Scheduled(fixedRateString = "${parser.fixedRateRSS}")
   public void runRSSParser() {
     for (Website website : websiteRepository.findByOwnerIsNotNull()) {
       try {
@@ -78,25 +63,44 @@ public class ParserService {
           log.info("Исправлен URL для сайта {}: {}", website.getName(), url);
         }
         rssParser.setLink(url);
-        parseSite(website, rssParser);
+
+        List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount);
+        List<ArticleDTO> articles = rssParser.parseLastArticles();
+
+        for (ArticleDTO articleDTO : articles) {
+          if (!oldArticlesUrls.contains(articleDTO.getUrl())) {
+            saveArticle(articleDTO, website);
+          }
+        }
       } catch (Exception e) {
         log.error("Ошибка при парсинге RSS для сайта {}: {}", website.getUrl(), e.getMessage(), e);
       }
     }
   }
 
-  @Transactional
-  protected void parseSite(Website website, SiteParser parser) {
-    List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount);
-    List<ArticleDTO> articles = parser.parseLastArticles();
+  protected void parseSite(Website website, BaseParser parser) {
+    List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount + 10);
 
+    try {
+      List<String> newArticlesUrls = parser.getArticleLinks();
+
+      for (String newArticleUrl : newArticlesUrls) {
+        if (!oldArticlesUrls.contains(newArticleUrl)) {
+          Optional<ArticleDTO> article = parser.getArticle(newArticleUrl);
+
+          article.ifPresent(articleDTO -> saveArticle(articleDTO, website));
+        }
+      }
+    } catch (Exception e) {
+      log.error("Ошибка при парсинге сайта {}: {}", website.getUrl(), e.getMessage(), e);
+    }
+  }
+
+  private void saveArticle(ArticleDTO articleDTO, Website website) {
     LocalDateTime now = LocalDateTime.now();
+    Set<Category> categories = getTextCategories(articleDTO.getDescription());
 
-    for (ArticleDTO articleDTO : articles) {
-      if (!oldArticlesUrls.contains(articleDTO.getUrl())) {
-        Set<Category> categories = getTextCategories(articleDTO.getDescription());
-
-        Article article = Article.builder()
+    Article article = Article.builder()
             .name(articleDTO.getName())
             .url(articleDTO.getUrl())
             .description(cutDescription(articleDTO.getDescription()))
@@ -106,17 +110,28 @@ public class ParserService {
             .categories(categories)
             .build();
 
-        articlesRepository.save(article);
-      }
-    }
+    articlesRepository.save(article);
   }
 
   private String cutDescription(String description) {
-    if (description.length() > maxDescription) {
-      //todo сделать сокращение с помощью регулярок
-      return description.substring(0, maxDescription);
+    if (description.length() <= maxDescription) {
+      return description;
     }
-    return description;
+
+    Pattern pattern = Pattern.compile("\\.(?=\\s|$)");
+    Matcher matcher = pattern.matcher(description.substring(0, maxDescription));
+
+    int lastDotIndex = -1;
+    while (matcher.find()) {
+      lastDotIndex = matcher.end();
+    }
+
+    if (lastDotIndex != -1) {
+      return description.substring(0, lastDotIndex).trim();
+    } else {
+      int lastSpace = description.substring(0, maxDescription).lastIndexOf(" ");
+      return description.substring(0, lastSpace > 0 ? lastSpace : maxDescription).trim();
+    }
   }
 
   private Set<Category> getTextCategories(String text) {

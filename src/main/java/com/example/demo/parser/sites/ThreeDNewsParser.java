@@ -3,6 +3,7 @@ package com.example.demo.parser.sites;
 
 import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.parser.BaseParser;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -15,10 +16,13 @@ import java.util.Optional;
 @Component
 @Slf4j
 public class ThreeDNewsParser extends BaseParser {
+  @Getter
+  private final String NAME = "3Dnews";
+
   private static final String BLOG_LINK = "https://3dnews.ru";
 
   @Override
-  protected List<String> getArticleLinks() {
+  public List<String> getArticleLinks() {
     return getArticleLinks(BLOG_LINK);
   }
 
@@ -47,7 +51,7 @@ public class ThreeDNewsParser extends BaseParser {
     try {
       Element titleElement = page.select("title").first();
       Element descriptionElement = page.select("div.js-mediator-article p").first();
-      Element dateElement = page.select("span.entry-date.tttes").first();
+      Element dateElement = page.select("span.entry-date strong").first();
 
       return Optional.ofNullable(ArticleDTO.builder()
           .name(titleElement.text())
