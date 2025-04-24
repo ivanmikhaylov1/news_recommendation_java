@@ -12,6 +12,7 @@ import com.example.demo.repository.WebsiteRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -41,59 +43,69 @@ public class ParserService {
   @Value("${parser.maxDescription}")
   private int maxDescription;
 
+  @Async
   @Scheduled(fixedRateString = "${parser.fixedRateMain}")
   public void runMainParsers() {
-    for (BaseParser parser : baseParsers) {
-      try {
-        Optional<Website> website = websiteRepository.findByNameAndOwnerIsNull(parser.getNAME());
-        website.ifPresent(value -> parseSite(value, parser));
-      } catch (Exception e) {
-        log.error("Ошибка при парсинге сайта {}: {}", parser.getNAME(), e.getMessage(), e);
-      }
-    }
+    List<CompletableFuture<Void>> futures = baseParsers.stream()
+            .map(parser -> CompletableFuture.runAsync(() -> parseSite(parser)))
+            .toList();
+
+    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
   }
 
-  //  @Scheduled(fixedRateString = "${parser.fixedRateRSS}")
-  public void runRSSParser() {
-    for (Website website : websiteRepository.findByOwnerIsNotNull()) {
-      try {
-        String url = website.getUrl();
-        if (url != null && !url.isEmpty() && !url.startsWith("http://") && !url.startsWith("https://")) {
-          url = "https://" + url;
-          log.info("Исправлен URL для сайта {}: {}", website.getName(), url);
-        }
-        rssParser.setLink(url);
-
-        List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount);
-        List<ArticleDTO> articles = rssParser.parseLastArticles();
-
-        for (ArticleDTO articleDTO : articles) {
-          if (!oldArticlesUrls.contains(articleDTO.getUrl())) {
-            saveArticle(articleDTO, website);
-          }
-        }
-      } catch (Exception e) {
-        log.error("Ошибка при парсинге RSS для сайта {}: {}", website.getUrl(), e.getMessage(), e);
-      }
+  private void parseSite(BaseParser parser) {
+    Optional<Website> optWebsite = websiteRepository.findByNameAndOwnerIsNull(parser.getNAME());
+    if (optWebsite.isEmpty()) {
+      log.error("Ошибка в название сайта: {}", parser.getNAME());
+      return;
     }
-  }
 
-  protected void parseSite(Website website, BaseParser parser) {
+    Website website = optWebsite.get();
+    log.debug("Парсинг сайта {}", website.getUrl());
+
     List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount + 10);
+    log.debug("Прошлые ссылки {}", oldArticlesUrls);
+    parser.getArticleLinks()
+            .thenAccept(newArticlesUrls -> {
+              log.debug("Новые ссылки с леты: {}", newArticlesUrls);
+              for (String newArticleUrl : newArticlesUrls) {
+                if (!oldArticlesUrls.contains(newArticleUrl)) {
+                  log.debug("Парсинг новости {}", newArticleUrl);
+                  parser.getArticle(newArticleUrl)
+                          .thenAccept(
+                                  optArticle -> optArticle.ifPresent(article -> {
+                                    saveArticle(article, website);
+                                  })
+                          )
+                          .join();
+                }
+              }
+            });
+  }
 
-    try {
-      List<String> newArticlesUrls = parser.getArticleLinks();
+  @Async
+  @Scheduled(fixedRateString = "${parser.fixedRateRSS}")
+  public void runRSSParser() {
+    List<Website> websites = websiteRepository.findByOwnerIsNotNull();
 
-      for (String newArticleUrl : newArticlesUrls) {
-        if (!oldArticlesUrls.contains(newArticleUrl)) {
-          Optional<ArticleDTO> article = parser.getArticle(newArticleUrl);
+    List<CompletableFuture<Void>> futures = websites.stream()
+            .map(website -> CompletableFuture.runAsync(() -> parseRSSSite(website)))
+            .toList();
 
-          article.ifPresent(articleDTO -> saveArticle(articleDTO, website));
-        }
-      }
-    } catch (Exception e) {
-      log.error("Ошибка при парсинге сайта {}: {}", website.getUrl(), e.getMessage(), e);
-    }
+    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+  }
+
+  private void parseRSSSite(Website website) {
+    List<String> oldArticlesUrls = articlesRepository.getLastArticles(website.getId(), limitArticleCount);
+    log.debug("Парсинг сайта {}", website.getUrl());
+    rssParser.parseLastArticles(website.getUrl())
+            .thenAccept(newArticles -> {
+              for (ArticleDTO articleDTO : newArticles) {
+                if (!oldArticlesUrls.contains(articleDTO.getUrl())) {
+                  saveArticle(articleDTO, website);
+                }
+              }
+            });
   }
 
   private void saveArticle(ArticleDTO articleDTO, Website website) {
@@ -111,6 +123,8 @@ public class ParserService {
             .build();
 
     articlesRepository.save(article);
+
+    log.debug("Статья {} сохранена", articleDTO.getUrl());
   }
 
   private String cutDescription(String description) {

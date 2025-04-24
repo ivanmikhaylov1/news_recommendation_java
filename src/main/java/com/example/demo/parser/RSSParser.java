@@ -1,37 +1,33 @@
 package com.example.demo.parser;
 
 import com.example.demo.domain.dto.ArticleDTO;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Component
 @Slf4j
-public class RSSParser {
-  private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
-  private static final int TIMEOUT = 20000;
-
+public class RSSParser extends HttpParser {
   @Value("${parser.limit}")
   private Integer limitArticleCount;
 
-  @Setter
-  private String link;
-
-  public List<ArticleDTO> parseLastArticles() {
-    Optional<Document> page = getPage(link);
-
-    return parseLastArticles(page.get());
+  public CompletableFuture<List<ArticleDTO>> parseLastArticles(String link) {
+    return getPage(link)
+            .thenApply(optPage -> optPage
+                    .map(page -> parseLastArticles(page, link))
+                    .orElse(Collections.emptyList())
+            );
   }
 
-  public List<ArticleDTO> parseLastArticles(Document page) {
+  public List<ArticleDTO> parseLastArticles(Document page, String link) {
     List<ArticleDTO> articles = new ArrayList<>();
 
     if (page != null) {
@@ -40,7 +36,7 @@ public class RSSParser {
         List<Element> articlesData = channel.select("item");
 
         for (Element articleData : articlesData) {
-          Optional<ArticleDTO> article = getArticle(articleData);
+          Optional<ArticleDTO> article = getArticle(articleData, link);
           article.ifPresent(articles::add);
 
           if (articles.size() >= limitArticleCount) {
@@ -48,13 +44,14 @@ public class RSSParser {
           }
         }
       } catch (Exception e) {
-        log.error("Website {} parsing error!", link, e);
+        log.error("Ошибка парсинга ленты: {}", link, e);
+        return Collections.emptyList();
       }
     }
     return articles;
   }
 
-  private Optional<ArticleDTO> getArticle(Element item) {
+  private Optional<ArticleDTO> getArticle(Element item, String link) {
     try {
       Element titleElement = item.select("title").first();
       Element descriptionElement = item.select("description").first();
@@ -68,27 +65,7 @@ public class RSSParser {
           .date(dateElement.text())
           .build());
     } catch (Exception e) {
-      log.error("Parsing error: {}", link, e);
-      return Optional.empty();
-    }
-  }
-
-  private Optional<Document> getPage(String link) {
-    try {
-      if (link == null || link.trim().isEmpty()) {
-        return Optional.empty();
-      }
-
-      if (!link.startsWith("http://") && !link.startsWith("https://")) {
-        return Optional.empty();
-      }
-
-      return Optional.ofNullable(Jsoup.connect(link)
-          .timeout(TIMEOUT)
-          .userAgent(USER_AGENT)
-          .get());
-    } catch (Exception e) {
-      log.error("Get request error: {}", link, e);
+      log.error("Ошибка парсинга новости: {}", link, e);
       return Optional.empty();
     }
   }

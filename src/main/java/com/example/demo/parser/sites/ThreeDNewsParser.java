@@ -10,8 +10,10 @@ import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Component
 @Slf4j
@@ -22,28 +24,28 @@ public class ThreeDNewsParser extends BaseParser {
   private static final String BLOG_LINK = "https://3dnews.ru";
 
   @Override
-  public List<String> getArticleLinks() {
+  public CompletableFuture<List<String>> getArticleLinks() {
     return getArticleLinks(BLOG_LINK);
   }
 
   @Override
   public List<String> getArticleLinks(Document page) {
-    List<Element> articleBlocks = page.select("div.content-block-data.white");
-    List<String> links = new ArrayList<>();
+    try {
+      List<Element> articleBlocks = page.select("div.content-block-data.white");
+      List<String> links = new ArrayList<>();
 
-    for (Element articleBlock : articleBlocks) {
-      Element linkElement = articleBlock.select("a").first();
+      for (Element articleBlock : articleBlocks) {
+        Element linkElement = articleBlock.select("a").first();
 
-      if (linkElement != null) {
-        links.add(linkElement.attr("href"));
+        if (linkElement != null) {
+          links.add(BLOG_LINK + linkElement.attr("href"));
+        }
       }
+      return links;
+    } catch (Exception e) {
+      log.error("Ошибка парсинга ленты: {}", BLOG_LINK, e);
+      return Collections.emptyList();
     }
-    return links;
-  }
-
-  @Override
-  public Optional<ArticleDTO> getArticle(String link) {
-    return super.getArticle(BLOG_LINK + link);
   }
 
   @Override
@@ -53,6 +55,10 @@ public class ThreeDNewsParser extends BaseParser {
       Element descriptionElement = page.select("div.js-mediator-article p").first();
       Element dateElement = page.select("span.entry-date strong").first();
 
+      if (dateElement == null) {
+        dateElement = page.select("span.date").first();
+      }
+
       return Optional.ofNullable(ArticleDTO.builder()
           .name(titleElement.text())
           .description(descriptionElement.text())
@@ -60,7 +66,7 @@ public class ThreeDNewsParser extends BaseParser {
           .date(dateElement.text().split(",")[0])
           .build());
     } catch (Exception e) {
-      log.error("Parsing error: {}", link, e);
+      log.error("Ошибка парсинга новости: {}", link, e);
       return Optional.empty();
     }
   }

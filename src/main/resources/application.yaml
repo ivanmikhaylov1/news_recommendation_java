@@ -3,6 +3,14 @@ server:
     apr:
       enabled: false
 
+logging:
+  level:
+    com:
+      example:
+        demo:
+          service:
+            ParserService: DEBUG
+
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/recommendation_service_db
@@ -12,13 +20,13 @@ spring:
 
   jpa:
     open-in-view: false
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
     hibernate:
       dialect: org.hibernate.dialect.PostgreSQLDialect
-      ddl-auto: update
+      ddl-auto: validate
 
   flyway:
     enabled: true
@@ -31,9 +39,9 @@ spring:
 
 parser:
   limit: 3
-  maxDescription: 2000
-  fixedRateMain: 600000
-  fixedRateRSS: 600000
+  maxDescription: 500
+  fixedRateMain: 30000
+  fixedRateRSS: 30000
 
 management:
   endpoints:

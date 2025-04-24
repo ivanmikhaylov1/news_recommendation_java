@@ -4,9 +4,10 @@ import com.example.demo.domain.dto.ArticleDTO;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 public interface SiteParser {
-  List<String> getArticleLinks();
+  CompletableFuture<List<String>> getArticleLinks();
 
-  Optional<ArticleDTO> getArticle(String link);
+  CompletableFuture<Optional<ArticleDTO>> getArticle(String link);
 }
