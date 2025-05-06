@@ -80,7 +80,7 @@ public class NotificationScheduleService {
         schedule = existingSchedule.get();
         log.debug("Найдено существующее расписание для пользователя {}", userId);
       } else {
-        
+
         synchronized (this) {
           existingSchedule = scheduleRepository.findActiveByUserId(userId);
           if (existingSchedule.isPresent()) {

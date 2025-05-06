@@ -5,8 +5,10 @@ import com.azure.ai.inference.ChatCompletionsClientBuilder;
 import com.azure.ai.inference.models.*;
 import com.azure.core.credential.AzureKeyCredential;
 import com.example.demo.AIClassificator.ArticleClassifier;
+import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.domain.model.Article;
 import com.example.demo.domain.model.Category;
+import com.example.demo.parser.SiteParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.cdimascio.dotenv.Dotenv;
@@ -14,34 +16,73 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class AIArticleParser {
+public class AIArticleParser implements SiteParser {
   private static final Dotenv dotenv = Dotenv.load();
   private static final String KEY = dotenv.get("KEY");
   private static final String ENDPOINT = dotenv.get("ENDPOINT");
   private static final String MODEL = dotenv.get("MODEL");
-  private static final long TIMEOUT = 15000; 
+  private static final long TIMEOUT = 15000;
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final ArticleClassifier articleClassifier;
 
+  @Override
+  public List<ArticleDTO> parseLastArticles() {
+    // TODO: Реализовать получение последних статей
+    return new ArrayList<>();
+  }
+
+  @Override
+  public CompletableFuture<List<String>> getArticleLinks() {
+    return CompletableFuture.supplyAsync(() -> {
+      // TODO: Реализовать получение списка ссылок на статьи
+      return new ArrayList<>();
+    });
+  }
+
+  @Override
+  public CompletableFuture<Optional<ArticleDTO>> getArticle(String link) {
+    return CompletableFuture.supplyAsync(() -> {
+      try {
+        ParsedArticle parsedArticle = parseArticle(link);
+        if (parsedArticle.getTitle().isEmpty() && parsedArticle.getDescription().isEmpty()) {
+          return Optional.empty();
+        }
+
+        ArticleDTO articleDTO = ArticleDTO.builder()
+            .name(parsedArticle.getTitle())
+            .description(parsedArticle.getDescription())
+            .date(parsedArticle.getPublishedDate())
+            .url(link)
+            .build();
+
+        return Optional.of(articleDTO);
+      } catch (Exception e) {
+        log.error("Ошибка при получении статьи по ссылке {}: {}", link, e.getMessage());
+        return Optional.empty();
+      }
+    });
+  }
+
   public ParsedArticle parseArticle(String html) {
     try {
-      html = html.replaceAll("(?s)<script[^>]*>.*?</script>", "")  
-          .replaceAll("(?s)<style[^>]*>.*?</style>", "")     
-          .replaceAll("<link[^>]*>", "")                     
-          .replaceAll("(?s)<noscript[^>]*>.*?</noscript>", "") 
-          .replaceAll("(?s)<!--.*?-->", "")                  
-          .replaceAll("<[^>]+>", " ")                        
-          .replaceAll("\\s+", " ")                           
-          .trim();                                           
+      html = html.replaceAll("(?s)<script[^>]*>.*?</script>", "")
+          .replaceAll("(?s)<style[^>]*>.*?</style>", "")
+          .replaceAll("<link[^>]*>", "")
+          .replaceAll("(?s)<noscript[^>]*>.*?</noscript>", "")
+          .replaceAll("(?s)<!--.*?-->", "")
+          .replaceAll("<[^>]+>", " ")
+          .replaceAll("\\s+", " ")
+          .trim();
 
-      int maxLength = 32000; 
+      int maxLength = 8000;
       if (html.length() > maxLength) {
         html = html.substring(0, maxLength) + "...";
       }
@@ -112,7 +153,7 @@ public class AIArticleParser {
     ChatCompletionsOptions options = new ChatCompletionsOptions(chatMessages);
     options.setModel(MODEL);
     options.setTemperature(0.2);
-    options.setMaxTokens(32000);
+    options.setMaxTokens(8000);
     options.setTopP(0.8);
     options.setFrequencyPenalty(0.5);
     options.setPresencePenalty(0.5);
@@ -161,7 +202,7 @@ public class AIArticleParser {
           article.setContent(root.get("content").asText().trim());
         }
 
-        
+
         if (root.has("author") && !root.get("author").asText().trim().isEmpty()) {
           article.setAuthor(root.get("author").asText().trim());
         }
@@ -170,7 +211,7 @@ public class AIArticleParser {
           article.setPublishedDate(root.get("publishedDate").asText().trim());
         }
 
-        
+
         if (article.getTitle().isEmpty() && article.getDescription().isEmpty()) {
           log.error("Статья не содержит ни заголовка, ни описания");
           return new ParsedArticle();
