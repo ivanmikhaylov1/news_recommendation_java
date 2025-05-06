@@ -72,7 +72,7 @@ public class UserService {
     User user = userRepository.findById(userId)
         .orElseThrow(() -> new EntityNotFoundException("Пользователь с ID " + userId + " не найден"));
 
-
+    
     user.getCategories().clear();
     user.getWebsites().clear();
     userRepository.save(user);

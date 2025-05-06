@@ -13,8 +13,6 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
@@ -23,6 +21,7 @@ public class ParserFactory {
   private final HiTechParser hiTechParser;
   private final InfoqParser infoqParser;
   private final ThreeDNewsParser threeDNewsParser;
+  private final RSSParser rssParser;
   private final AIArticleParser aiArticleParser;
 
   public SiteParser getParser(Website website) {
@@ -43,6 +42,11 @@ public class ParserFactory {
       }
     }
 
+    if (website.getUrl().contains("/rss") || website.getUrl().endsWith(".xml")) {
+      rssParser.setLink(website.getUrl());
+      return rssParser;
+    }
+    
     return new AISiteParser(aiArticleParser, website.getUrl());
   }
 
@@ -66,16 +70,6 @@ public class ParserFactory {
     @Override
     public List<ArticleDTO> parseLastArticles() {
       return List.of();
-    }
-
-    @Override
-    public CompletableFuture<List<String>> getArticleLinks() {
-      return CompletableFuture.completedFuture(List.of());
-    }
-
-    @Override
-    public CompletableFuture<Optional<ArticleDTO>> getArticle(String link) {
-      return CompletableFuture.completedFuture(Optional.empty());
     }
   }
 
@@ -110,37 +104,6 @@ public class ParserFactory {
         log.error("Ошибка при парсинге сайта {}: {}", url, e.getMessage());
         return List.of();
       }
-    }
-
-    @Override
-    public CompletableFuture<List<String>> getArticleLinks() {
-      return CompletableFuture.completedFuture(List.of(url));
-    }
-
-    @Override
-    public CompletableFuture<Optional<ArticleDTO>> getArticle(String link) {
-      return CompletableFuture.supplyAsync(() -> {
-        try {
-          Document document = Jsoup.connect(link)
-              .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-              .timeout(10000)
-              .get();
-
-          AIArticleParser.ParsedArticle parsedArticle = aiArticleParser.parseArticle(document.html());
-
-          ArticleDTO article = ArticleDTO.builder()
-              .name(parsedArticle.getTitle())
-              .description(parsedArticle.getDescription())
-              .date(parsedArticle.getPublishedDate())
-              .url(link)
-              .build();
-
-          return Optional.of(article);
-        } catch (Exception e) {
-          log.error("Ошибка при парсинге статьи {}: {}", link, e.getMessage());
-          return Optional.empty();
-        }
-      });
     }
   }
 }

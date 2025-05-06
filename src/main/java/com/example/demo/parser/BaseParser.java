@@ -1,27 +1,23 @@
 package com.example.demo.parser;
 
 import com.example.demo.domain.dto.ArticleDTO;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 @Slf4j
-public abstract class BaseParser extends HttpParser implements SiteParser, AutoCloseable {
+public abstract class BaseParser implements SiteParser, AutoCloseable {
+  protected static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
   protected static final int THREAD_COUNT = 25;
+  protected static final int TIMEOUT = 20000;
   protected static final int THREADS_TIMEOUT = 60000;
   private final ExecutorService executor;
-
-  @Getter
-  protected final String language = "ru";
-
   @Value("${parser.limit}")
   protected int limitArticleCount;
 
@@ -29,76 +25,82 @@ public abstract class BaseParser extends HttpParser implements SiteParser, AutoC
     executor = Executors.newFixedThreadPool(THREAD_COUNT);
   }
 
-  public abstract String getNAME();
-
   @Override
   public List<ArticleDTO> parseLastArticles() {
+    List<String> articleLinks = getArticleLinks();
+    List<Callable<Optional<ArticleDTO>>> tasks = new ArrayList<>();
+
+    for (String articleLink : articleLinks) {
+      tasks.add(() -> getArticle(articleLink));
+    }
+
+    List<ArticleDTO> articles = new ArrayList<>();
+
     try {
-      List<String> articleLinks = getArticleLinks().get();
-      List<ArticleDTO> articles = new ArrayList<>();
+      List<Future<Optional<ArticleDTO>>> results = executor.invokeAll(tasks);
 
-      for (String link : articleLinks) {
-        Optional<ArticleDTO> article = getArticle(link).get();
-        article.ifPresent(articles::add);
+      for (Future<Optional<ArticleDTO>> result : results) {
+        try {
+          Optional<ArticleDTO> article = result.get();
+          article.ifPresent(articles::add);
+        } catch (ExecutionException e) {
+          log.error("Article parsing error", e);
+        }
       }
+    } catch (InterruptedException e) {
+      log.error("Parsing interrupted", e);
+      Thread.currentThread().interrupt();
+    }
 
-      return articles;
-    } catch (Exception e) {
-      log.error("Error parsing articles", e);
+    return articles;
+  }
+
+  protected abstract List<String> getArticleLinks();
+
+  protected List<String> getArticleLinks(String blogLink) {
+    Optional<Document> page = getPage(blogLink);
+    if (page.isEmpty()) {
       return List.of();
     }
-  }
-
-  @Override
-  public CompletableFuture<List<String>> getArticleLinks() {
-    return CompletableFuture.supplyAsync(() -> {
-      try {
-        return getArticleLinks(getNAME()).get();
-      } catch (Exception e) {
-        log.error("Error getting article links", e);
-        return List.of();
-      }
-    }, executor);
-  }
-
-  protected CompletableFuture<List<String>> getArticleLinks(String blogLink) {
-    return CompletableFuture.supplyAsync(() -> {
-      try {
-        Optional<Document> page = getPage(blogLink).get();
-        if (page.isEmpty()) {
-          return List.of();
-        }
-        List<String> articlesLinks = getArticleLinks(page.get());
-        return articlesLinks.size() > limitArticleCount ? articlesLinks.subList(0, limitArticleCount) : articlesLinks;
-      } catch (Exception e) {
-        log.error("Error getting article links from {}", blogLink, e);
-        return List.of();
-      }
-    }, executor);
+    List<String> articlesLinks = getArticleLinks(page.get());
+    return articlesLinks.size() > limitArticleCount ? articlesLinks.subList(0, limitArticleCount) : articlesLinks;
   }
 
   protected abstract List<String> getArticleLinks(Document page);
 
   protected abstract Optional<ArticleDTO> getArticle(String link, Document page);
 
-  @Override
-  public CompletableFuture<Optional<ArticleDTO>> getArticle(String link) {
-    return CompletableFuture.supplyAsync(() -> {
-      try {
-        Optional<Document> page = getPage(link).get();
-        if (page.isEmpty()) {
-          return Optional.empty();
-        }
-        return getArticle(link, page.get());
-      } catch (Exception e) {
-        log.error("Error getting article from {}", link, e);
-        return Optional.empty();
-      }
-    }, executor);
+  protected Optional<ArticleDTO> getArticle(String link) {
+    Optional<Document> page = getPage(link);
+    if (page.isEmpty()) {
+      return Optional.empty();
+    }
+    return getArticle(link, page.get());
+  }
+
+  protected Optional<Document> getPage(String link) {
+    try {
+      return Optional.ofNullable(Jsoup.connect(link)
+          .timeout(TIMEOUT)
+          .userAgent(USER_AGENT)
+          .get());
+    } catch (Exception e) {
+      log.error("Get request error: {}", link, e);
+      return Optional.empty();
+    }
   }
 
   @Override
   public void close() {
     executor.shutdown();
+
+    try {
+      if (!executor.awaitTermination(THREADS_TIMEOUT, TimeUnit.MILLISECONDS)) {
+        executor.shutdownNow();
+      }
+    } catch (InterruptedException e) {
+      executor.shutdownNow();
+      Thread.currentThread().interrupt();
+    }
   }
 }

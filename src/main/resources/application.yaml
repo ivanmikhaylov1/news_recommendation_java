@@ -3,14 +3,6 @@ server:
     apr:
       enabled: false
 
-logging:
-  level:
-    com:
-      example:
-        demo:
-          service:
-            ParserService: DEBUG
-
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/news_recommendation
@@ -20,13 +12,13 @@ spring:
 
   jpa:
     open-in-view: false
-    show-sql: false
+    show-sql: true
     properties:
       hibernate:
         format_sql: true
     hibernate:
       dialect: org.hibernate.dialect.PostgreSQLDialect
-      ddl-auto: validate
+      ddl-auto: update
 
   flyway:
     enabled: true
@@ -41,9 +33,9 @@ spring:
 
 parser:
   limit: 3
-  maxDescription: 500
-  fixedRateMain: 30000
-  fixedRateRSS: 30000
+  maxDescription: 2000
+  fixedRateMain: 36000000
+  fixedRateRSS: 36000000
 
 management:
   endpoints:
@@ -57,7 +49,3 @@ telegram:
   bot:
     name: test_bot
     token: 7653606051:AAH9JQM62ATMHNRMTLtnS2Cjt17PfTHyMUA
-
-yandex:
-  token: *
-  folder-id: *
