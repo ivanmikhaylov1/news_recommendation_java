@@ -19,4 +19,6 @@ public interface WebsiteRepository extends JpaRepository<Website, Long> {
   Optional<Website> findByIdAndUsersContaining(Long id, User user);
 
   Optional<Website> findByNameAndOwnerIsNull(String name);
+
+  Optional<Website> findByName(String name);
 }
