@@ -13,16 +13,13 @@ import java.util.concurrent.*;
 
 @Slf4j
 public abstract class BaseParser implements SiteParser, AutoCloseable {
-
   protected static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
   protected static final int THREAD_COUNT = 25;
   protected static final int TIMEOUT = 20000;
   protected static final int THREADS_TIMEOUT = 60000;
-
+  private final ExecutorService executor;
   @Value("${parser.limit}")
   protected int limitArticleCount;
-
-  private final ExecutorService executor;
 
   protected BaseParser() {
     executor = Executors.newFixedThreadPool(THREAD_COUNT);

@@ -7,7 +7,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 
 @TestConfiguration
 public class TestContainersConfig {
-
+  @SuppressWarnings("resource")
   private static final PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:15")
       .withDatabaseName("testdb")
       .withUsername("test")

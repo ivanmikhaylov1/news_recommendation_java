@@ -1,8 +1,7 @@
 CREATE SEQUENCE IF NOT EXISTS website_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS category_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS article_id_seq START WITH 1 INCREMENT BY 1;
-CREATE SEQUENCE IF NOT EXISTS article_reaction_id_seq START WITH 1 INCREMENT BY 1;
-CREATE SEQUENCE IF NOT EXISTS user_reaction_id_seq START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS schedule_id_seq START WITH 1 INCREMENT BY 1;
 
 CREATE TABLE IF NOT EXISTS users
 (
@@ -56,28 +55,6 @@ CREATE TABLE IF NOT EXISTS articles
     CONSTRAINT fk_article_website FOREIGN KEY (website_id) REFERENCES websites (website_id)
 );
 
-CREATE TABLE IF NOT EXISTS article_reactions
-(
-    article_reaction_id BIGINT PRIMARY KEY DEFAULT nextval('article_reaction_id_seq'),
-    article_id          BIGINT NOT NULL,
-    likes_count         INTEGER            DEFAULT 0,
-    dislikes_count      INTEGER            DEFAULT 0,
-    rating              FLOAT              DEFAULT 0.0,
-    CONSTRAINT fk_article_reaction_article FOREIGN KEY (article_id) REFERENCES articles (article_id)
-);
-
-CREATE TABLE IF NOT EXISTS user_reactions
-(
-    user_reaction_id BIGINT PRIMARY KEY DEFAULT nextval('user_reaction_id_seq'),
-    user_id          BIGINT      NOT NULL,
-    article_id       BIGINT      NOT NULL,
-    reaction_type    VARCHAR(10) NOT NULL CHECK (reaction_type IN ('LIKE', 'DISLIKE')),
-    created_at       TIMESTAMP          DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_user_reaction_user FOREIGN KEY (user_id) REFERENCES users (user_id),
-    CONSTRAINT fk_user_reaction_article FOREIGN KEY (article_id) REFERENCES articles (article_id),
-    CONSTRAINT unique_user_article_reaction UNIQUE (user_id, article_id)
-);
-
 CREATE TABLE article_category
 (
     article_id  BIGINT NOT NULL,
@@ -85,4 +62,14 @@ CREATE TABLE article_category
     PRIMARY KEY (article_id, category_id),
     FOREIGN KEY (article_id) REFERENCES articles (article_id) ON DELETE CASCADE,
     FOREIGN KEY (category_id) REFERENCES categories (category_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS notification_schedules
+(
+    schedule_id BIGINT PRIMARY KEY DEFAULT nextval('schedule_id_seq'),
+    user_id     BIGINT  NOT NULL,
+    start_hour  INTEGER NOT NULL   DEFAULT 12,
+    end_hour    INTEGER NOT NULL   DEFAULT 20,
+    is_active   BOOLEAN NOT NULL   DEFAULT true,
+    CONSTRAINT fk_notification_schedule_user FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
 );

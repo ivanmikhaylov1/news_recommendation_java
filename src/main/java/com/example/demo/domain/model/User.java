@@ -58,4 +58,8 @@ public class User {
         .findFirst()
         .orElse(null);
   }
+
+  public void setId(Long id) {
+    this.id = id;
+  }
 }

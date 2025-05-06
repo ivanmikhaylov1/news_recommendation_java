@@ -49,11 +49,24 @@ public class ThreeDNewsParser extends BaseParser {
       Element descriptionElement = page.select("div.js-mediator-article p").first();
       Element dateElement = page.select("span.entry-date.tttes").first();
 
+      if (titleElement == null || descriptionElement == null) {
+        log.warn("Не удалось найти заголовок или описание для: {}", link);
+        return Optional.empty();
+      }
+
+      String dateText = "Неизвестная дата";
+      if (dateElement != null) {
+        String[] dateParts = dateElement.text().split(",");
+        dateText = dateParts.length > 0 ? dateParts[0] : dateText;
+      } else {
+        log.warn("Не удалось найти дату для: {}", link);
+      }
+
       return Optional.ofNullable(ArticleDTO.builder()
           .name(titleElement.text())
           .description(descriptionElement.text())
           .url(link)
-          .date(dateElement.text().split(",")[0])
+          .date(dateText)
           .build());
     } catch (Exception e) {
       log.error("Parsing error: {}", link, e);

@@ -9,10 +9,7 @@ import lombok.Data;
 @AllArgsConstructor
 public class ArticleDTO {
   private String name;
-
   private String description;
-
   private String date;
-
   private String url;
 }

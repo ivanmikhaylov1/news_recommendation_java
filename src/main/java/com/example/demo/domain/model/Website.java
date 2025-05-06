@@ -33,6 +33,7 @@ public class Website {
       joinColumns = @JoinColumn(name = "website_id"),
       inverseJoinColumns = @JoinColumn(name = "user_id")
   )
+  @Builder.Default
   private Set<User> users = new HashSet<>();
 
   @ManyToOne(fetch = FetchType.LAZY)
