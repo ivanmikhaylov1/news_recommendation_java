@@ -13,15 +13,20 @@ import com.example.demo.repository.WebsiteRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -38,33 +43,43 @@ public class ParserService {
   @Value("${parser.maxDescription}")
   private int maxDescription;
 
+  @Async
   @Scheduled(fixedRateString = "${parser.fixedRateMain}")
   public void runMainParsers() {
-    for (DefaultWebsiteIds value : DefaultWebsiteIds.values()) {
-      try {
-        Optional<Website> website = websiteRepository.findByName(value.getName());
-        website.ifPresent(this::parseSite);
-      } catch (Exception e) {
-        log.error("Ошибка при парсинге сайта {}: {}", value, e.getMessage(), e);
-      }
-    }
+    List<CompletableFuture<Void>> futures = Arrays.stream(DefaultWebsiteIds.values())
+        .map(value -> CompletableFuture.runAsync(() -> {
+          try {
+            Optional<Website> website = websiteRepository.findByName(value.getName());
+            website.ifPresent(this::parseSite);
+          } catch (Exception e) {
+            log.error("Ошибка при парсинге сайта {}: {}", value, e.getMessage(), e);
+          }
+        }))
+        .toList();
+
+    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
   }
 
+  @Async
   @Scheduled(fixedRateString = "${parser.fixedRateRSS}")
-  public void runRSSParser() {
-    for (Website website : websiteRepository.findByOwnerIsNotNull()) {
-      try {
-        String url = website.getUrl();
-        if (url != null && !url.isEmpty() && !url.startsWith("http://") && !url.startsWith("https://")) {
-          url = "https://" + url;
-          log.info("Исправлен URL для сайта {}: {}", website.getName(), url);
-        }
+  public void runAIParser() {
+    List<Website> websites = websiteRepository.findByOwnerIsNotNull();
+    List<CompletableFuture<Void>> futures = websites.stream()
+        .map(website -> CompletableFuture.runAsync(() -> {
+          try {
+            String url = website.getUrl();
+            if (url != null && !url.isEmpty() && !url.startsWith("http://") && !url.startsWith("https://")) {
+              url = "https://" + url;
+              log.info("Исправлен URL для сайта {}: {}", website.getName(), url);
+            }
+            parseSite(website);
+          } catch (Exception e) {
+            log.error("Ошибка при парсинге сайта {} с помощью AI: {}", website.getUrl(), e.getMessage(), e);
+          }
+        }))
+        .toList();
 
-        parseSite(website);
-      } catch (Exception e) {
-        log.error("Ошибка при парсинге RSS для сайта {}: {}", website.getUrl(), e.getMessage(), e);
-      }
-    }
+    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
   }
 
   @Transactional
@@ -112,18 +127,30 @@ public class ParserService {
   }
 
   private String cutDescription(String description) {
-    if (description.length() > maxDescription) {
-      //todo  сокращение с помощью регулярок
-      return description.substring(0, maxDescription);
+    if (description.length() <= maxDescription) {
+      return description;
     }
-    return description;
+
+    Pattern pattern = Pattern.compile("\\.(?=\\s|$)");
+    Matcher matcher = pattern.matcher(description.substring(0, maxDescription));
+
+    int lastDotIndex = -1;
+    while (matcher.find()) {
+      lastDotIndex = matcher.end();
+    }
+
+    if (lastDotIndex != -1) {
+      return description.substring(0, lastDotIndex).trim();
+    } else {
+      int lastSpace = description.substring(0, maxDescription).lastIndexOf(" ");
+      return description.substring(0, lastSpace > 0 ? lastSpace : maxDescription).trim();
+    }
   }
 
   private String limitStringLength(String input) {
     if (input != null && input.length() > 255) {
       return input.substring(0, 255);
     }
-
     return input;
   }
 }

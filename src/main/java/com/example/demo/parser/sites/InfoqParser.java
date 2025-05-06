@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Component
 @Slf4j
@@ -18,8 +19,8 @@ public class InfoqParser extends BaseParser {
   private static final String BLOG_LINK = "https://www.infoq.com/development";
 
   @Override
-  protected List<String> getArticleLinks() {
-    return getArticleLinks(BLOG_LINK);
+  public String getNAME() {
+    return BLOG_LINK;
   }
 
   @Override
@@ -38,7 +39,7 @@ public class InfoqParser extends BaseParser {
   }
 
   @Override
-  public Optional<ArticleDTO> getArticle(String link) {
+  public CompletableFuture<Optional<ArticleDTO>> getArticle(String link) {
     return super.getArticle(DOMAIN + link);
   }
 

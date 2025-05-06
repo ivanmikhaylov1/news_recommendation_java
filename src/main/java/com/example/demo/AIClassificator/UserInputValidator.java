@@ -23,7 +23,7 @@ public class UserInputValidator {
   private static final String KEY = dotenv.get("KEY");
   private static final String ENDPOINT = dotenv.get("ENDPOINT");
   private static final String MODEL = dotenv.get("MODEL");
-  private static final long TIMEOUT = 15000; 
+  private static final long TIMEOUT = 15000;
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final UrlValidator urlValidator;
 
@@ -94,10 +94,10 @@ public class UserInputValidator {
 
     ChatCompletionsOptions options = new ChatCompletionsOptions(chatMessages);
     options.setModel(MODEL);
-    options.setTemperature(0.2); 
+    options.setTemperature(0.2);
     options.setMaxTokens(100);
-    options.setTopP(0.8); 
-    options.setFrequencyPenalty(0.5); 
+    options.setTopP(0.8);
+    options.setFrequencyPenalty(0.5);
     options.setPresencePenalty(0.5);
 
     final long startTime = System.currentTimeMillis();

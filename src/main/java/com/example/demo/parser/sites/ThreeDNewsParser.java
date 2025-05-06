@@ -1,6 +1,5 @@
 package com.example.demo.parser.sites;
 
-
 import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.parser.BaseParser;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +10,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Component
 @Slf4j
@@ -18,8 +18,8 @@ public class ThreeDNewsParser extends BaseParser {
   private static final String BLOG_LINK = "https://3dnews.ru";
 
   @Override
-  protected List<String> getArticleLinks() {
-    return getArticleLinks(BLOG_LINK);
+  public String getNAME() {
+    return BLOG_LINK;
   }
 
   @Override
@@ -38,7 +38,7 @@ public class ThreeDNewsParser extends BaseParser {
   }
 
   @Override
-  public Optional<ArticleDTO> getArticle(String link) {
+  public CompletableFuture<Optional<ArticleDTO>> getArticle(String link) {
     return super.getArticle(BLOG_LINK + link);
   }
 
