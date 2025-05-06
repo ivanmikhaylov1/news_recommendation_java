@@ -57,5 +57,5 @@ telegram:
     token: 6481641133:AAFCJ3MNNtM0ZnygPFh3cmUpwSIUF3PzOvA
 
 yandex:
-  token: AQVN1qBjEZSo9U4XS2Nd3YquMBIpkWOgSqkgHCh2
+  token: *
   folder-id: b1ge5mgjepbtdo48h05j
