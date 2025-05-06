@@ -9,8 +9,10 @@ import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Component
 @Slf4j
@@ -21,23 +23,28 @@ public class HiTechParser extends BaseParser {
   private final Integer MIN_DESCRIPTION = 20;
 
   @Override
-  public List<String> getArticleLinks() {
+  public CompletableFuture<List<String>> getArticleLinks() {
     return getArticleLinks(BLOG_LINK);
   }
 
   @Override
   public List<String> getArticleLinks(Document page) {
-    List<Element> titleElements = page.select("a");
-    List<String> links = new ArrayList<>();
+    try {
+      List<Element> titleElements = page.select("a");
+      List<String> links = new ArrayList<>();
 
-    for (Element titleElement : titleElements) {
-      String link = titleElement.attr("href");
-      if (link != null && link.startsWith("https://hi-tech.mail.ru/news/")) {
-        links.add(link);
+      for (Element titleElement : titleElements) {
+        String link = titleElement.attr("href");
+        if (link != null && link.startsWith("https://hi-tech.mail.ru/news/")) {
+          links.add(link);
+        }
       }
-    }
 
-    return links;
+      return links;
+    } catch (Exception e) {
+      log.error("Ошибка парсинга ленты: {}", BLOG_LINK, e);
+      return Collections.emptyList();
+    }
   }
 
   @Override
@@ -63,7 +70,7 @@ public class HiTechParser extends BaseParser {
               .date(dateElement.text().trim())
               .build());
     } catch (Exception e) {
-      log.error("Parsing error: {}", link, e);
+      log.error("Ошибка парсинга новости: {}", link, e);
       return Optional.empty();
     }
   }

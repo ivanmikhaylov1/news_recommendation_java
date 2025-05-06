@@ -9,8 +9,10 @@ import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Component
 @Slf4j
@@ -19,31 +21,31 @@ public class InfoqParser extends BaseParser {
   private final String NAME = "Infoq";
 
   private static final String DOMAIN = "https://www.infoq.com";
-  private static final String BLOG_LINK = "https://www.infoq.com/development";
+  private static final String BLOG_LINK = "https://www.infoq.com/development/";
 
   @Override
-  public List<String> getArticleLinks() {
+  public CompletableFuture<List<String>> getArticleLinks() {
     return getArticleLinks(BLOG_LINK);
   }
 
   @Override
   public List<String> getArticleLinks(Document page) {
-    List<Element> titleElements = page.select("h4.card__title a");
-    List<String> links = new ArrayList<>();
+    try {
+      List<Element> titleElements = page.select("h4.card__title a");
+      List<String> links = new ArrayList<>();
 
-    for (Element titleElement : titleElements) {
-      String link = titleElement.attr("href");
-      if (link.contains("news") || link.contains("articles")) {
-        links.add(link);
+      for (Element titleElement : titleElements) {
+        String link = titleElement.attr("href");
+        if (link.contains("news") || link.contains("articles")) {
+          links.add(DOMAIN + link);
+        }
       }
+
+      return links;
+    } catch (Exception e) {
+      log.error("Ошибка парсинга ленты: {}", BLOG_LINK, e);
+      return Collections.emptyList();
     }
-
-    return links;
-  }
-
-  @Override
-  public Optional<ArticleDTO> getArticle(String link) {
-    return super.getArticle(DOMAIN + link);
   }
 
   @Override
@@ -68,7 +70,7 @@ public class InfoqParser extends BaseParser {
           .date(dateElement.text())
           .build());
     } catch (Exception e) {
-      log.error("Parsing error: {}", link, e);
+      log.error("Ошибка парсинга новости: {}", link, e);
       return Optional.empty();
     }
   }
