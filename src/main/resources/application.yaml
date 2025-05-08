@@ -56,4 +56,8 @@ management:
 telegram:
   bot:
     name: test_bot
-    token: 7653606051:AAH9JQM62ATMHNRMTLtnS2Cjt17PfTHyMUA 
+    token: 7653606051:AAH9JQM62ATMHNRMTLtnS2Cjt17PfTHyMUA
+
+yandex:
+  token: AQVNwgpvk1PbP68bUIKmp6d3Kl5mEWsm2Y6hrFpI
+  folder-id: b1gid3rv9gfnfirmdsf0

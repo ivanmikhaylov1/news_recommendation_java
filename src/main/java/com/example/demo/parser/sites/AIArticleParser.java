@@ -34,6 +34,16 @@ public class AIArticleParser implements SiteParser {
   private final ArticleClassifier articleClassifier;
 
   @Override
+  public String getNAME() {
+    return "AI";
+  }
+
+  @Override
+  public String getLanguage() {
+    return "ru";
+  }
+
+  @Override
   public List<ArticleDTO> parseLastArticles() {
     // TODO: Реализовать получение последних статей
     return new ArrayList<>();
@@ -237,4 +247,4 @@ public class AIArticleParser implements SiteParser {
     private String author = "";
     private String publishedDate = "";
   }
-} 
+}

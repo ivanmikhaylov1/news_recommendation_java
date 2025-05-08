@@ -64,6 +64,16 @@ public class ParserFactory {
 
   private static class EmptyParser implements SiteParser {
     @Override
+    public String getNAME() {
+      return "Empty";
+    }
+
+    @Override
+    public String getLanguage() {
+      return "ru";
+    }
+
+    @Override
     public List<ArticleDTO> parseLastArticles() {
       return List.of();
     }
@@ -86,6 +96,16 @@ public class ParserFactory {
     public AISiteParser(AIArticleParser aiArticleParser, String url) {
       this.aiArticleParser = aiArticleParser;
       this.url = url;
+    }
+
+    @Override
+    public String getNAME() {
+      return url;
+    }
+
+    @Override
+    public String getLanguage() {
+      return "ru";
     }
 
     @Override

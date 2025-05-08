@@ -1,6 +1,7 @@
 package com.example.demo.parser;
 
 import com.example.demo.domain.dto.ArticleDTO;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,6 +18,9 @@ public abstract class BaseParser extends HttpParser implements SiteParser, AutoC
   protected static final int THREAD_COUNT = 25;
   protected static final int THREADS_TIMEOUT = 60000;
   private final ExecutorService executor;
+
+  @Getter
+  protected final String language = "ru";
 
   @Value("${parser.limit}")
   protected int limitArticleCount;
