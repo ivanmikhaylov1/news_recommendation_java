@@ -2,16 +2,16 @@ package com.example.demo.parser.sites;
 
 import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.parser.BaseParser;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Component
 @Slf4j
@@ -22,31 +22,31 @@ public class InfoqParser extends BaseParser {
   private final String language = "en";
 
   private static final String DOMAIN = "https://www.infoq.com";
-  private static final String BLOG_LINK = "https://www.infoq.com/development/";
+  private static final String BLOG_LINK = "https://www.infoq.com/development";
 
   @Override
-  public CompletableFuture<List<String>> getArticleLinks() {
-    return getArticleLinks(BLOG_LINK);
+  public String getNAME() {
+    return BLOG_LINK;
   }
 
   @Override
   public List<String> getArticleLinks(Document page) {
-    try {
-      List<Element> titleElements = page.select("h4.card__title a");
-      List<String> links = new ArrayList<>();
+    List<Element> titleElements = page.select("h4.card__title a");
+    List<String> links = new ArrayList<>();
 
-      for (Element titleElement : titleElements) {
-        String link = titleElement.attr("href");
-        if (link.contains("news") || link.contains("articles")) {
-          links.add(DOMAIN + link);
-        }
+    for (Element titleElement : titleElements) {
+      String link = titleElement.attr("href");
+      if (link.contains("news") || link.contains("articles")) {
+        links.add(link);
       }
-
-      return links;
-    } catch (Exception e) {
-      log.error("Ошибка парсинга ленты: {}", BLOG_LINK, e);
-      return Collections.emptyList();
     }
+
+    return links;
+  }
+
+  @Override
+  public CompletableFuture<Optional<ArticleDTO>> getArticle(String link) {
+    return super.getArticle(DOMAIN + link);
   }
 
   @Override
@@ -76,7 +76,7 @@ public class InfoqParser extends BaseParser {
           .date(date)
           .build());
     } catch (Exception e) {
-      log.error("Ошибка парсинга новости: {}", link, e);
+      log.error("Parsing error: {}", link, e);
       return Optional.empty();
     }
   }

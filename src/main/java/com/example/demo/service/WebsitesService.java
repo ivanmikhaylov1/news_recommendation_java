@@ -6,7 +6,8 @@ import com.example.demo.domain.model.Website;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.WebsiteRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -19,9 +20,9 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class WebsitesService {
 
+  private static final Logger log = LoggerFactory.getLogger(WebsitesService.class);
   private final WebsiteRepository repository;
   private final UserRepository userRepository;
 

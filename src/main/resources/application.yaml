@@ -13,7 +13,7 @@ logging:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/recommendation_service_db
+    url: jdbc:postgresql://localhost:5432/news_recommendation
     username: postgres
     password: admin
     driver-class-name: org.postgresql.Driver
@@ -31,6 +31,8 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    clean-on-validation-error: true
+    validate-on-migrate: false
 
   task:
     scheduling:
@@ -53,9 +55,9 @@ management:
 
 telegram:
   bot:
-    name: ttestpython_bot
-    token: 6481641133:AAFCJ3MNNtM0ZnygPFh3cmUpwSIUF3PzOvA
+    name: test_bot
+    token: 7653606051:AAH9JQM62ATMHNRMTLtnS2Cjt17PfTHyMUA
 
 yandex:
-  token: *
-  folder-id: b1ge5mgjepbtdo48h05j
+  token: AQVNwgpvk1PbP68bUIKmp6d3Kl5mEWsm2Y6hrFpI
+  folder-id: b1gid3rv9gfnfirmdsf0

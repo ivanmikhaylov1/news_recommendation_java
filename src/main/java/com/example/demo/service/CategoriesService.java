@@ -76,12 +76,27 @@ public class CategoriesService {
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public CategoryDTO createCategory(User user, Category category) {
-    User freshUser = userRepository.findById(user.getId())
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+    try {
+      if (repository.existsByName(category.getName())) {
+        log.warn("Попытка создать категорию с существующим именем: {}", category.getName());
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+            String.format("Категория с названием '%s' уже существует", category.getName()));
+      }
 
-    category.setOwner(freshUser);
-    Category savedCategory = repository.save(category);
+      User freshUser = userRepository.findById(user.getId())
+          .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-    return new CategoryDTO(savedCategory.getId(), savedCategory.getName());
+      category.setOwner(freshUser);
+      Category savedCategory = repository.save(category);
+      log.info("Создана новая категория: {} (ID: {})", savedCategory.getName(), savedCategory.getId());
+
+      return new CategoryDTO(savedCategory.getId(), savedCategory.getName());
+    } catch (ResponseStatusException e) {
+      throw e;
+    } catch (Exception e) {
+      log.error("Ошибка при создании категории: {}", e.getMessage());
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+          "Произошла ошибка при создании категории");
+    }
   }
 }

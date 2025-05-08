@@ -19,8 +19,10 @@ public class YandexTranslator {
   private static final String URL = "https://translate.api.cloud.yandex.net/translate/v2/translate";
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   private final HttpClient client = HttpClient.newHttpClient();
+  
   @Value("${yandex.token}")
   private String token;
+  
   @Value("${yandex.folder-id}")
   private String folderId;
 
@@ -29,7 +31,7 @@ public class YandexTranslator {
   }
 
   public CompletableFuture<Optional<String>> translate(String text, String sourceLang) {
-    return translate(text, "en", "ru");
+    return translate(text, sourceLang, "ru");
   }
 
   public CompletableFuture<Optional<String>> translate(String text, String sourceLang,
@@ -93,4 +95,4 @@ public class YandexTranslator {
           return Optional.empty();
         });
   }
-}
+} 

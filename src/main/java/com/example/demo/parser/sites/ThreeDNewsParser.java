@@ -1,16 +1,13 @@
 package com.example.demo.parser.sites;
 
-
 import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.parser.BaseParser;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -18,34 +15,31 @@ import java.util.concurrent.CompletableFuture;
 @Component
 @Slf4j
 public class ThreeDNewsParser extends BaseParser {
-  @Getter
-  private final String NAME = "3Dnews";
-
   private static final String BLOG_LINK = "https://3dnews.ru";
 
   @Override
-  public CompletableFuture<List<String>> getArticleLinks() {
-    return getArticleLinks(BLOG_LINK);
+  public String getNAME() {
+    return BLOG_LINK;
   }
 
   @Override
   public List<String> getArticleLinks(Document page) {
-    try {
-      List<Element> articleBlocks = page.select("div.content-block-data.white");
-      List<String> links = new ArrayList<>();
+    List<Element> articleBlocks = page.select("div.content-block-data.white");
+    List<String> links = new ArrayList<>();
 
-      for (Element articleBlock : articleBlocks) {
-        Element linkElement = articleBlock.select("a").first();
+    for (Element articleBlock : articleBlocks) {
+      Element linkElement = articleBlock.select("a").first();
 
-        if (linkElement != null) {
-          links.add(BLOG_LINK + linkElement.attr("href"));
-        }
+      if (linkElement != null) {
+        links.add(linkElement.attr("href"));
       }
-      return links;
-    } catch (Exception e) {
-      log.error("Ошибка парсинга ленты: {}", BLOG_LINK, e);
-      return Collections.emptyList();
     }
+    return links;
+  }
+
+  @Override
+  public CompletableFuture<Optional<ArticleDTO>> getArticle(String link) {
+    return super.getArticle(BLOG_LINK + link);
   }
 
   @Override
@@ -53,20 +47,29 @@ public class ThreeDNewsParser extends BaseParser {
     try {
       Element titleElement = page.select("title").first();
       Element descriptionElement = page.select("div.js-mediator-article p").first();
-      Element dateElement = page.select("span.entry-date strong").first();
+      Element dateElement = page.select("span.entry-date.tttes").first();
 
-      if (dateElement == null) {
-        dateElement = page.select("span.date").first();
+      if (titleElement == null || descriptionElement == null) {
+        log.warn("Не удалось найти заголовок или описание для: {}", link);
+        return Optional.empty();
+      }
+
+      String dateText = "Неизвестная дата";
+      if (dateElement != null) {
+        String[] dateParts = dateElement.text().split(",");
+        dateText = dateParts.length > 0 ? dateParts[0] : dateText;
+      } else {
+        log.warn("Не удалось найти дату для: {}", link);
       }
 
       return Optional.ofNullable(ArticleDTO.builder()
           .name(titleElement.text())
           .description(descriptionElement.text())
           .url(link)
-          .date(dateElement.text().split(",")[0])
+          .date(dateText)
           .build());
     } catch (Exception e) {
-      log.error("Ошибка парсинга новости: {}", link, e);
+      log.error("Parsing error: {}", link, e);
       return Optional.empty();
     }
   }

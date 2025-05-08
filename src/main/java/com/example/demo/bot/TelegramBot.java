@@ -1,5 +1,6 @@
 package com.example.demo.bot;
 
+import com.example.demo.AIClassificator.UserInputValidator;
 import com.example.demo.configuration.BotConfig;
 import com.example.demo.domain.dto.CategoryDTO;
 import com.example.demo.domain.dto.NotificationScheduleDTO;
@@ -13,9 +14,13 @@ import com.example.demo.service.UserService;
 import com.example.demo.service.WebsitesService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
+import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
@@ -23,6 +28,8 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -36,6 +43,15 @@ public class TelegramBot extends TelegramLongPollingBot {
   private final CategoriesService categoriesService;
   private final WebsitesService websitesService;
   private final NotificationScheduleService notificationScheduleService;
+  private final UserInputValidator userInputValidator;
+
+  // Карта для хранения идентификатора последнего отправленного сообщения для каждого чата
+  private final Map<Long, Integer> lastMessageIds = new ConcurrentHashMap<>();
+
+  // Добавляем новое поле для хранения состояния диалога пользователей
+  private final Map<Long, DialogState> userDialogStates = new ConcurrentHashMap<>();
+  // Поле для хранения временных данных диалога
+  private final Map<Long, String> tempDialogData = new ConcurrentHashMap<>();
 
   @Override
   public String getBotUsername() {
@@ -57,38 +73,49 @@ public class TelegramBot extends TelegramLongPollingBot {
       // Автоматическая регистрация пользователя
       try {
         User user = userService.getOrCreateUser(userId);
-        if (messageText.startsWith(ADD_CATEGORY_COMMAND)) {
-          handleAddCategoryCommand(chatId, user, messageText);
-          sendWebsitesKeyboard(userId, user);
-        } else if (messageText.startsWith(ADD_WEBSITE_COMMAND)) {
-          handleAddWebsiteCommand(chatId, user, messageText);
-          showMainMenu(chatId);
-        } else {
-          switch (messageText) {
-            case "/start":
-              startCommandReceived(chatId, user, update.getMessage().getChat().getFirstName());
-              break;
-            case "/categories":
-              sendCategoriesKeyboard(chatId, user);
-              break;
-            case "/websites":
-              sendWebsitesKeyboard(chatId, user);
-              break;
-            case "/mycategories":
-              showUserCategories(chatId, user);
-              break;
-            case "/mywebsites":
-              showUserWebsites(chatId, user);
-              break;
-            case "/menu":
-              showMainMenu(chatId);
-              break;
-            case "/help":
-              sendHelpMessage(chatId);
-              break;
-            default:
-              sendMessage(chatId, "Отправьте /help для просмотра доступных команд.");
+
+        // Проверяем, находится ли пользователь в диалоге
+        DialogState currentState = userDialogStates.getOrDefault(userId, DialogState.NONE);
+
+        if (currentState != DialogState.NONE) {
+          // Обрабатываем сообщение в контексте текущего диалога
+          handleDialogMessage(chatId, user, userId, messageText, currentState);
+        } else if (messageText.startsWith("/")) {
+          // Обработка команд, начинающихся с "/"
+          if (messageText.startsWith(ADD_CATEGORY_COMMAND)) {
+            handleAddCategoryCommand(chatId, user, messageText);
+          } else if (messageText.startsWith(ADD_WEBSITE_COMMAND)) {
+            handleAddWebsiteCommand(chatId, user, messageText);
+          } else {
+            switch (messageText) {
+              case "/start":
+                startCommandReceived(chatId, user, update.getMessage().getChat().getFirstName());
+                break;
+              case "/categories":
+                sendNewInteractiveInterface(chatId, "Выберите интересующие вас категории новостей:", InterfaceType.CATEGORIES, user);
+                break;
+              case "/websites":
+                sendNewInteractiveInterface(chatId, "Выберите интересующие вас источники новостей:", InterfaceType.WEBSITES, user);
+                break;
+              case "/mycategories":
+                showUserCategoriesWithNewMessage(chatId, user);
+                break;
+              case "/mywebsites":
+                showUserWebsitesWithNewMessage(chatId, user);
+                break;
+              case "/menu":
+                showMainMenuWithNewMessage(chatId);
+                break;
+              case "/help":
+                sendHelpMessage(chatId);
+                break;
+              default:
+                sendMessage(chatId, "Отправьте /help для просмотра доступных команд.");
+            }
           }
+        } else {
+          // Обработка обычных текстовых сообщений не в контексте диалога
+          sendMessage(chatId, "Используйте команды или кнопки для взаимодействия с ботом. Отправьте /help для просмотра доступных команд.");
         }
       } catch (Exception e) {
         sendMessage(chatId, "Произошла ошибка при обработке вашего запроса");
@@ -97,53 +124,92 @@ public class TelegramBot extends TelegramLongPollingBot {
       // Обработка нажатий на кнопки
       String callbackData = update.getCallbackQuery().getData();
       long chatId = update.getCallbackQuery().getMessage().getChatId();
+      int messageId = update.getCallbackQuery().getMessage().getMessageId();
       Long userId = update.getCallbackQuery().getFrom().getId();
 
       try {
         User user = userService.getOrCreateUser(userId);
 
+        // Сохраняем ID сообщения для дальнейшего обновления
+        lastMessageIds.put(chatId, messageId);
+
+        // Временное сообщение, показывающее, что команда обрабатывается
+        String processingMessage = "⌛ Обработка...";
+
         if (callbackData.startsWith("category_")) {
+          // Обновляем сообщение с информацией о выполнении
+          updateMessageWithKeyboard(chatId, messageId, processingMessage, null);
+
           // Выбор категории
           Long categoryId = Long.parseLong(callbackData.substring(9));
           categoriesService.chooseCategory(user, categoryId);
-          sendMessage(chatId, "Категория успешно добавлена!");
-          showUserCategories(chatId, user); // Показываем обновленный список категорий
+
+          // Обновляем с результатом
+          updateMessageWithKeyboard(chatId, messageId, "✅ Категория успешно добавлена!", null);
+
+          // Показываем обновленный список категорий
+          showUserCategories(chatId, user);
+
+          // Завершаем диалог
+          cancelDialog(chatId, userId);
         } else if (callbackData.equals("add_custom_category")) {
-          // Добавление собственной категории
-          sendMessage(chatId, "Чтобы добавить свою категорию, отправьте команду с названием: " + ADD_CATEGORY_COMMAND + " ИМЯ_КАТЕГОРИИ");
+          // Запустить диалог для добавления категории
+          startAddCategoryDialog(chatId, userId);
         } else if (callbackData.startsWith("remove_category_")) {
+          // Обновляем сообщение с информацией о выполнении
+          updateMessageWithKeyboard(chatId, messageId, processingMessage, null);
+
           // Удаление категории
           Long categoryId = Long.parseLong(callbackData.substring(16));
           categoriesService.removeCategory(user, categoryId);
-          sendMessage(chatId, "Категория успешно удалена!");
-          showUserCategories(chatId, user); // Обновляем список категорий
+
+          // Обновляем с результатом
+          updateMessageWithKeyboard(chatId, messageId, "✅ Категория успешно удалена!", null);
+
+          // Обновляем список категорий
+          showUserCategories(chatId, user);
         } else if (callbackData.equals("add_more_categories")) {
           // Показываем клавиатуру с категориями для добавления
-          sendCategoriesKeyboard(chatId, user);
+          sendInteractiveInterface(chatId, "Выберите интересующие вас категории новостей:", InterfaceType.CATEGORIES, user);
         } else if (callbackData.equals("continue_to_websites")) {
           // После выбора категорий переходим к выбору сайтов
-          sendWebsitesKeyboard(chatId, user);
+          sendInteractiveInterface(chatId, "Выберите интересующие вас источники новостей:", InterfaceType.WEBSITES, user);
         } else if (callbackData.startsWith("website_")) {
+          // Обновляем сообщение с информацией о выполнении
+          updateMessageWithKeyboard(chatId, messageId, processingMessage, null);
+
           // Выбор сайта
           Long websiteId = Long.parseLong(callbackData.substring(8));
           websitesService.chooseWebsite(user, websiteId);
-          sendMessage(chatId, "Сайт успешно добавлен!");
-          showUserWebsites(chatId, user); // Показываем обновленный список сайтов
+
+          // Обновляем с результатом
+          updateMessageWithKeyboard(chatId, messageId, "✅ Сайт успешно добавлен!", null);
+
+          // Показываем обновленный список сайтов
+          showUserWebsites(chatId, user);
         } else if (callbackData.equals("add_custom_website")) {
-          // Добавление собственного сайта
-          sendMessage(chatId, "Чтобы добавить свой сайт, отправьте команду с названием и URL: " + ADD_WEBSITE_COMMAND + " НАЗВАНИЕ URL");
+          // Запустить диалог для добавления сайта
+          startAddWebsiteDialog(chatId, userId);
         } else if (callbackData.startsWith("remove_website_")) {
+          // Обновляем сообщение с информацией о выполнении
+          updateMessageWithKeyboard(chatId, messageId, processingMessage, null);
+
           // Удаление сайта
           Long websiteId = Long.parseLong(callbackData.substring(15));
           websitesService.removeWebsite(user, websiteId);
-          sendMessage(chatId, "Сайт успешно удален!");
-          showUserWebsites(chatId, user); // Обновляем список сайтов
+
+          // Обновляем с результатом
+          updateMessageWithKeyboard(chatId, messageId, "✅ Сайт успешно удален!", null);
+
+          // Обновляем список сайтов
+          showUserWebsites(chatId, user);
         } else if (callbackData.equals("add_more_websites")) {
           // Показываем клавиатуру с сайтами для добавления
-          sendWebsitesKeyboard(chatId, user);
+          sendInteractiveInterface(chatId, "Выберите интересующие вас источники новостей:", InterfaceType.WEBSITES, user);
         } else if (callbackData.equals("setup_complete")) {
           // Завершение настройки
-          sendMessage(chatId, "Настройка завершена! Теперь вы будете получать новости по выбранным категориям и с выбранных сайтов.");
+          updateMessageWithKeyboard(chatId, messageId,
+              "✅ Настройка завершена! Теперь вы будете получать новости по выбранным категориям и с выбранных сайтов.", null);
           showMainMenu(chatId);
         } else if (callbackData.equals("back_to_main_menu")) {
           // Возврат в главное меню
@@ -161,7 +227,6 @@ public class TelegramBot extends TelegramLongPollingBot {
           // Выбор времени начала уведомлений
           showTimeSelectionMenu(chatId, user, true);
         } else if (callbackData.startsWith("set_start_hour_")) {
-          // Установка времени начала уведомлений
           try {
             // Разделяем строку по последнему символу '_' чтобы корректно извлечь число
             String[] parts = callbackData.split("_");
@@ -176,29 +241,31 @@ public class TelegramBot extends TelegramLongPollingBot {
 
             // Проверка диапазона часов
             if (hour < 0 || hour > 23) {
-              sendMessage(chatId, "Произошла ошибка: недопустимое значение часа. Пожалуйста, выберите время от 0 до 23.");
+              updateMessageWithKeyboard(chatId, messageId,
+                  "Произошла ошибка: недопустимое значение часа. Пожалуйста, выберите время от 0 до 23.", null);
               showTimeSelectionMenu(chatId, user, true);
               return;
             }
 
             // Сохраняем временно выбранное время начала в сессионном объекте пользователя
-            NotificationScheduleDTO scheduleDTO = notificationScheduleService.getActiveScheduleDTO(user);
+            NotificationScheduleDTO scheduleDTO = notificationScheduleService.getActiveScheduleDTO(user.getId());
             if (scheduleDTO != null) {
               // Обновляем только расписание, сохраняя конечное время
-              notificationScheduleService.updateNotificationTime(user, hour, scheduleDTO.getEndHour());
-              sendMessage(chatId, "Время начала получения уведомлений установлено на " + hour + ":00");
+              notificationScheduleService.updateNotificationTime(user.getId(), hour, scheduleDTO.getEndHour());
+              updateMessageWithKeyboard(chatId, messageId,
+                  "Время начала получения уведомлений установлено на " + hour + ":00", null);
 
               // Сразу переходим к выбору времени окончания
               showTimeSelectionMenu(chatId, user, false);
             } else {
-              sendMessage(chatId, "Ошибка при обновлении настроек");
+              updateMessageWithKeyboard(chatId, messageId, "Ошибка при обновлении настроек", null);
             }
           } catch (Exception e) {
-            sendMessage(chatId, "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте снова.");
+            updateMessageWithKeyboard(chatId, messageId,
+                "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте снова.", null);
             showTimeSelectionMenu(chatId, user, true);
           }
         } else if (callbackData.startsWith("set_end_hour_")) {
-          // Установка времени окончания уведомлений
           try {
             // Разделяем строку по последнему символу '_' чтобы корректно извлечь число
             String[] parts = callbackData.split("_");
@@ -213,31 +280,38 @@ public class TelegramBot extends TelegramLongPollingBot {
 
             // Проверка диапазона часов
             if (hour < 0 || hour > 23) {
-              sendMessage(chatId, "Произошла ошибка: недопустимое значение часа. Пожалуйста, выберите время от 0 до 23.");
+              updateMessageWithKeyboard(chatId, messageId,
+                  "Произошла ошибка: недопустимое значение часа. Пожалуйста, выберите время от 0 до 23.", null);
               showTimeSelectionMenu(chatId, user, false);
               return;
             }
 
-            NotificationScheduleDTO scheduleDTO = notificationScheduleService.getActiveScheduleDTO(user);
+            NotificationScheduleDTO scheduleDTO = notificationScheduleService.getActiveScheduleDTO(user.getId());
             if (scheduleDTO != null) {
               // Проверяем, что время окончания не раньше времени начала
               int startHour = scheduleDTO.getStartHour();
               if (hour <= startHour) {
-                sendMessage(chatId, "Время окончания должно быть позже времени начала. Пожалуйста, выберите время позже " + startHour + ":00");
+                updateMessageWithKeyboard(chatId, messageId,
+                    "Время окончания должно быть позже времени начала. Пожалуйста, выберите время позже " + startHour + ":00", null);
                 showTimeSelectionMenu(chatId, user, false);
               } else {
                 // Обновляем расписание уведомлений
-                notificationScheduleService.updateNotificationTime(user, startHour, hour);
+                notificationScheduleService.updateNotificationTime(user.getId(), startHour, hour);
 
-                sendMessage(chatId, "Время окончания получения уведомлений установлено на " + hour + ":00");
-                sendMessage(chatId, "Установлен период уведомлений: с " + startHour + ":00 до " + hour + ":00");
+                // Отправляем обновление вместо нового сообщения
+                StringBuilder resultMessage = new StringBuilder();
+                resultMessage.append("Время окончания получения уведомлений установлено на ").append(hour).append(":00\n");
+                resultMessage.append("Установлен период уведомлений: с ").append(startHour).append(":00 до ").append(hour).append(":00");
+
+                updateMessageWithKeyboard(chatId, messageId, resultMessage.toString(), null);
                 showSettingsMenu(chatId, user); // Возвращаемся в настройки
               }
             } else {
-              sendMessage(chatId, "Ошибка при обновлении настроек");
+              updateMessageWithKeyboard(chatId, messageId, "Ошибка при обновлении настроек", null);
             }
           } catch (Exception e) {
-            sendMessage(chatId, "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте снова.");
+            updateMessageWithKeyboard(chatId, messageId,
+                "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте снова.", null);
             showTimeSelectionMenu(chatId, user, false);
           }
         } else if (callbackData.equals("back_to_settings")) {
@@ -248,27 +322,32 @@ public class TelegramBot extends TelegramLongPollingBot {
           showDeleteConfirmation(chatId);
         } else if (callbackData.equals("delete_account_confirmed")) {
           // Удаление аккаунта пользователя
-          userService.deleteUser(userId);
-          sendMessage(chatId, "Ваш аккаунт был успешно удален. Чтобы начать заново, отправьте /start.");
+          deleteAccount(chatId, userId);
         } else if (callbackData.equals("toggle_notifications")) {
           // Включение/отключение уведомлений
-          NotificationScheduleDTO scheduleDTO = notificationScheduleService.getActiveScheduleDTO(user);
+          NotificationScheduleDTO scheduleDTO = notificationScheduleService.getActiveScheduleDTO(user.getId());
           if (scheduleDTO != null) {
             boolean newState = !scheduleDTO.getIsActive();
-            notificationScheduleService.toggleScheduleActive(user, newState);
-            String statusMessage = newState ?
-                "Уведомления включены. Вы будете получать новости в установленное время." :
-                "Уведомления отключены. Вы не будете получать автоматические новости.";
-            sendMessage(chatId, statusMessage);
+            notificationScheduleService.toggleScheduleActive(user.getId(), newState);
+            // Обновляем сообщение с настройками
             showSettingsMenu(chatId, user);
           } else {
-            sendMessage(chatId, "Ошибка при обновлении настроек");
+            updateMessageWithKeyboard(chatId, messageId, "Ошибка при обновлении настроек", null);
           }
+        } else if (callbackData.equals("cancel_dialog")) {
+          // Отмена текущего диалога
+          cancelDialog(chatId, userId);
         } else {
-          sendMessage(chatId, "Попробуйте использовать меню команд");
+          updateMessageWithKeyboard(chatId, messageId, "Попробуйте использовать меню команд", null);
         }
       } catch (Exception e) {
-        sendMessage(chatId, "Произошла ошибка при обработке вашего запроса");
+        try {
+          // В случае ошибки пытаемся обновить текущее сообщение с информацией об ошибке
+          updateMessageWithKeyboard(chatId, messageId, "Произошла ошибка при обработке вашего запроса", null);
+        } catch (Exception ex) {
+          // Если не удается обновить сообщение, отправляем новое
+          sendMessage(chatId, "Произошла ошибка при обработке вашего запроса");
+        }
       }
     }
   }
@@ -280,8 +359,6 @@ public class TelegramBot extends TelegramLongPollingBot {
         "/websites - выбрать источники новостей\n" +
         "/mycategories - просмотреть мои категории\n" +
         "/mywebsites - просмотреть мои источники\n" +
-        ADD_CATEGORY_COMMAND + " ИМЯ - добавить собственную категорию\n" +
-        ADD_WEBSITE_COMMAND + " НАЗВАНИЕ URL - добавить собственный источник\n" +
         "/help - показать это сообщение\n";
 
     sendMessage(chatId, helpText);
@@ -295,55 +372,7 @@ public class TelegramBot extends TelegramLongPollingBot {
       return;
     }
 
-    SendMessage message = new SendMessage();
-    message.setChatId(String.valueOf(chatId));
-    message.setText("Ваши категории:");
-
-    InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
-    List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-
-    // Добавляем кнопки для каждой категории пользователя с возможностью удаления
-    for (CategoryDTO category : userCategories) {
-      List<InlineKeyboardButton> rowInline = new ArrayList<>();
-
-      InlineKeyboardButton categoryNameButton = new InlineKeyboardButton();
-      categoryNameButton.setText(category.getName());
-      categoryNameButton.setCallbackData("info_category_" + category.getId());
-      rowInline.add(categoryNameButton);
-
-      // Кнопка для удаления категории
-      InlineKeyboardButton deleteButton = new InlineKeyboardButton();
-      deleteButton.setText("❌");
-      deleteButton.setCallbackData("remove_category_" + category.getId());
-      rowInline.add(deleteButton);
-
-      rowsInline.add(rowInline);
-    }
-
-    // Добавляем кнопку для добавления категорий
-    List<InlineKeyboardButton> addCategoriesRow = new ArrayList<>();
-    InlineKeyboardButton addCategoriesButton = new InlineKeyboardButton();
-    addCategoriesButton.setText("Добавить еще категории");
-    addCategoriesButton.setCallbackData("add_more_categories");
-    addCategoriesRow.add(addCategoriesButton);
-    rowsInline.add(addCategoriesRow);
-
-    // Добавляем кнопку для перехода к выбору сайтов
-    List<InlineKeyboardButton> continueToWebsitesRow = new ArrayList<>();
-    InlineKeyboardButton continueToWebsitesButton = new InlineKeyboardButton();
-    continueToWebsitesButton.setText("Перейти к выбору сайтов");
-    continueToWebsitesButton.setCallbackData("continue_to_websites");
-    continueToWebsitesRow.add(continueToWebsitesButton);
-    rowsInline.add(continueToWebsitesRow);
-
-    markupInline.setKeyboard(rowsInline);
-    message.setReplyMarkup(markupInline);
-
-    try {
-      execute(message);
-    } catch (TelegramApiException e) {
-      log.error("Ошибка при отправке списка категорий пользователя: {}", e.getMessage());
-    }
+    sendInteractiveInterface(chatId, "Ваши категории:", InterfaceType.USER_CATEGORIES, user);
   }
 
   private void showUserWebsites(long chatId, User user) {
@@ -354,309 +383,300 @@ public class TelegramBot extends TelegramLongPollingBot {
       return;
     }
 
-    SendMessage message = new SendMessage();
-    message.setChatId(String.valueOf(chatId));
-    message.setText("Ваши источники новостей:");
+    sendInteractiveInterface(chatId, "Ваши источники новостей:", InterfaceType.USER_WEBSITES, user);
+  }
 
-    InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
-    List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-
-    // Добавляем кнопки для каждого сайта пользователя с возможностью удаления
-    for (WebsiteDTO website : userWebsites) {
-      List<InlineKeyboardButton> rowInline = new ArrayList<>();
-      InlineKeyboardButton websiteNameButton = new InlineKeyboardButton();
-      websiteNameButton.setText(website.getName());
-      websiteNameButton.setCallbackData("info_website_" + website.getId());
-      rowInline.add(websiteNameButton);
-      InlineKeyboardButton deleteButton = new InlineKeyboardButton();
-      deleteButton.setText("❌");
-      deleteButton.setCallbackData("remove_website_" + website.getId());
-      rowInline.add(deleteButton);
-
-      rowsInline.add(rowInline);
-    }
-
-    // Добавляем кнопку для добавления сайтов
-    List<InlineKeyboardButton> addWebsitesRow = new ArrayList<>();
-    InlineKeyboardButton addWebsitesButton = new InlineKeyboardButton();
-    addWebsitesButton.setText("Добавить еще сайты");
-    addWebsitesButton.setCallbackData("add_more_websites");
-    addWebsitesRow.add(addWebsitesButton);
-    rowsInline.add(addWebsitesRow);
-
-    // Добавляем кнопку для завершения настройки
-    List<InlineKeyboardButton> setupCompleteRow = new ArrayList<>();
-    InlineKeyboardButton setupCompleteButton = new InlineKeyboardButton();
-    setupCompleteButton.setText("Завершить настройку");
-    setupCompleteButton.setCallbackData("setup_complete");
-    setupCompleteRow.add(setupCompleteButton);
-    rowsInline.add(setupCompleteRow);
-
-    markupInline.setKeyboard(rowsInline);
-    message.setReplyMarkup(markupInline);
-
+  /**
+   * Отправляет сообщение и возвращает его ID для дальнейшего обновления
+   */
+  private Integer sendMessageAndGetId(long chatId, String text) {
     try {
-      execute(message);
+      Message sentMessage = execute(SendMessage.builder()
+          .chatId(chatId)
+          .text(text)
+          .build());
+      return sentMessage.getMessageId();
     } catch (TelegramApiException e) {
-      log.error("Ошибка при отправке списка сайтов пользователя: {}", e.getMessage());
+      log.error("Ошибка при отправке сообщения: {}", e.getMessage());
+      return null;
     }
   }
 
+  /**
+   * Обновляет текст сообщения без клавиатуры
+   */
+  private void updateMessage(long chatId, Integer messageId, String text) {
+    if (messageId == null) {
+      sendMessage(chatId, text);
+      return;
+    }
+
+    try {
+      execute(EditMessageText.builder()
+          .chatId(chatId)
+          .messageId(messageId)
+          .text(text)
+          .build());
+    } catch (TelegramApiException e) {
+      log.error("Ошибка при обновлении сообщения: {}", e.getMessage());
+      // В случае ошибки пытаемся отправить новое сообщение
+      sendMessage(chatId, text);
+    }
+  }
+
+  /**
+   * Обработка команды добавления своей категории
+   */
   private void handleAddCategoryCommand(long chatId, User user, String messageText) {
-    // Извлекаем название категории из сообщения
-    if (messageText.length() <= ADD_CATEGORY_COMMAND.length() + 1) {
-      sendMessage(chatId, "Пожалуйста, укажите название категории: " + ADD_CATEGORY_COMMAND + " ИМЯ_КАТЕГОРИИ");
-      return;
-    }
-
-    String categoryName = messageText.substring(ADD_CATEGORY_COMMAND.length() + 1).trim();
-    if (categoryName.isEmpty()) {
-      sendMessage(chatId, "Название категории не может быть пустым!");
-      return;
-    }
-
     try {
-      Category newCategory = new Category();
-      newCategory.setName(categoryName);
-      CategoryDTO createdCategory = categoriesService.createCategory(user, newCategory);
+      // Проверяем, что есть что добавлять
+      String categoryName = messageText.substring(ADD_CATEGORY_COMMAND.length()).trim();
+      if (categoryName.isEmpty()) {
+        // Отправляем сообщение с правильным форматом команды
+        sendMessage(chatId, "Укажите название категории. Пример: " + ADD_CATEGORY_COMMAND + " Технологии");
+        return;
+      }
 
-      // Автоматически добавляем созданную категорию пользователю
-      categoriesService.chooseCategory(user, createdCategory.getId());
+      // Проверяем, не является ли введенный текст командой бота
+      if (categoryName.startsWith("/")) {
+        sendMessage(chatId, "Название категории не может начинаться с символа '/'. Пожалуйста, введите другое название.");
+        return;
+      }
 
-      sendMessage(chatId, "Категория '" + categoryName + "' успешно создана и добавлена в ваш список!");
+      // Отправляем сообщение о начале обработки
+      Integer processingMessageId = sendMessageAndGetId(chatId, "⌛ Проверяем и добавляем категорию...");
+
+      // Извлекаем название категории и проверяем его валидность через нейросеть
+      UserInputValidator.ValidationResult validationResult = userInputValidator.validateCategoryName(categoryName);
+
+      if (validationResult.isValid()) {
+        try {
+          // Если название прошло валидацию, используем исправленное название
+          String validCategoryName = validationResult.getCorrectedValue();
+
+          // Отправляем сообщение о создании категории
+          Category newCategory = new Category();
+          newCategory.setName(validCategoryName);
+          CategoryDTO categoryDTO = categoriesService.createCategory(user, newCategory);
+
+          // Автоматически добавляем созданную категорию пользователю
+          categoriesService.chooseCategory(user, categoryDTO.getId());
+
+          updateMessage(chatId, processingMessageId, String.format("✅ Категория \"%s\" успешно добавлена!", validCategoryName));
+
+          // Показываем обновленный список выбранных категорий
+          sendNewInteractiveInterface(chatId, "Ваши категории:", InterfaceType.USER_CATEGORIES, user);
+
+          // Завершаем диалог
+          cancelDialog(chatId, user.getId());
+        } catch (ResponseStatusException e) {
+          if (e.getStatusCode() == HttpStatus.CONFLICT) {
+            updateMessage(chatId, processingMessageId, String.format("❌ %s", e.getReason()));
+          } else {
+            updateMessage(chatId, processingMessageId, "❌ Произошла ошибка при создании категории. Попробуйте другое название.");
+          }
+          // Показываем интерфейс для добавления категорий снова
+          sendNewInteractiveInterface(chatId, "Выберите интересующие вас категории новостей:", InterfaceType.CATEGORIES, user);
+        }
+      } else {
+        // Если название не прошло валидацию, отправляем сообщение с ошибкой
+        updateMessage(chatId, processingMessageId, String.format("❌ Ошибка: %s", validationResult.getExplanation()));
+
+        // Показываем интерфейс для добавления категорий снова
+        sendNewInteractiveInterface(chatId, "Выберите интересующие вас категории новостей:", InterfaceType.CATEGORIES, user);
+      }
+    } catch (StringIndexOutOfBoundsException e) {
+      sendMessage(chatId, "Укажите название категории. Пример: " + ADD_CATEGORY_COMMAND + " Технологии");
     } catch (Exception e) {
-      sendMessage(chatId, "Не удалось создать категорию. Возможно, такая категория уже существует.");
+      log.error("Ошибка при добавлении категории: {}", e.getMessage());
+      sendMessage(chatId, "Произошла ошибка при добавлении категории. Пожалуйста, попробуйте позже.");
     }
   }
 
+  /**
+   * Обработка команды добавления своего сайта
+   */
   private void handleAddWebsiteCommand(long chatId, User user, String messageText) {
-    // Извлекаем название и URL сайта из сообщения
-    if (messageText.length() <= ADD_WEBSITE_COMMAND.length() + 1) {
-      sendMessage(chatId, "Пожалуйста, укажите название и URL сайта: " + ADD_WEBSITE_COMMAND + " НАЗВАНИЕ URL");
-      return;
-    }
-
-    String[] parts = messageText.substring(ADD_WEBSITE_COMMAND.length() + 1).trim().split("\\s+", 2);
-
-    if (parts.length < 2 || parts[0].isEmpty() || parts[1].isEmpty()) {
-      sendMessage(chatId, "Пожалуйста, укажите и название, и URL сайта: " + ADD_WEBSITE_COMMAND + " НАЗВАНИЕ URL");
-      return;
-    }
-
-    String websiteName = parts[0].trim();
-    String websiteUrl = parts[1].trim();
-
     try {
-      Website newWebsite = new Website();
-      newWebsite.setName(websiteName);
-      newWebsite.setUrl(websiteUrl);
-      WebsiteDTO createdWebsite = websitesService.createWebsite(user, newWebsite);
+      // Проверяем, что есть что добавлять
+      String websiteInfo = messageText.substring(ADD_WEBSITE_COMMAND.length()).trim();
+      if (websiteInfo.isEmpty()) {
+        // Отправляем сообщение с правильным форматом команды
+        sendMessage(chatId, "Укажите название и URL сайта. Пример: " + ADD_WEBSITE_COMMAND + " РБК https://www.rbc.ru");
+        return;
+      }
 
-      // Автоматически добавляем созданный сайт пользователю
-      websitesService.chooseWebsite(user, createdWebsite.getId());
+      // Отправляем сообщение о начале обработки
+      Integer processingMessageId = sendMessageAndGetId(chatId, "⌛ Проверяем и добавляем сайт...");
 
-      sendMessage(chatId, "Сайт '" + websiteName + "' успешно создан и добавлен в ваш список!");
+      // Парсим строку для получения названия и URL
+      String[] parts = websiteInfo.split("\\s+", 2);
+      if (parts.length < 2) {
+        updateMessage(chatId, processingMessageId, "❌ Ошибка: укажите и название, и URL сайта. Пример: " + ADD_WEBSITE_COMMAND + " РБК https://www.rbc.ru");
+        return;
+      }
+
+      String websiteName = parts[0].trim();
+      String websiteUrl = parts[1].trim();
+
+      // Выполняем валидацию названия и URL через нейронную сеть
+      UserInputValidator.ValidationResult nameValidationResult = userInputValidator.validateWebsiteName(websiteName);
+      UserInputValidator.ValidationResult urlValidationResult = userInputValidator.validateWebsiteUrl(websiteUrl);
+
+      if (nameValidationResult.isValid() && urlValidationResult.isValid()) {
+        // Если оба поля прошли валидацию, используем исправленные значения
+        String validWebsiteName = nameValidationResult.getCorrectedValue();
+        String validWebsiteUrl = urlValidationResult.getCorrectedValue();
+
+        // Добавляем сайт
+        Website newWebsite = new Website();
+        newWebsite.setName(validWebsiteName);
+        newWebsite.setUrl(validWebsiteUrl);
+        WebsiteDTO websiteDTO = websitesService.createWebsite(user, newWebsite);
+
+        // Автоматически добавляем созданный сайт пользователю
+        websitesService.chooseWebsite(user, websiteDTO.getId());
+
+        updateMessage(chatId, processingMessageId, String.format("✅ Сайт \"%s\" (%s) успешно добавлен!", validWebsiteName, validWebsiteUrl));
+
+        // Показываем обновленный список выбранных сайтов
+        sendNewInteractiveInterface(chatId, "Ваши источники новостей:", InterfaceType.USER_WEBSITES, user);
+      } else {
+        // Если какое-то из полей не прошло валидацию, отправляем сообщение с ошибкой
+        StringBuilder errorMessage = new StringBuilder("❌ Ошибка при добавлении сайта:\n");
+        if (!nameValidationResult.isValid()) {
+          errorMessage.append("- Название: ").append(nameValidationResult.getExplanation()).append("\n");
+        }
+        if (!urlValidationResult.isValid()) {
+          errorMessage.append("- URL: ").append(urlValidationResult.getExplanation());
+        }
+        updateMessage(chatId, processingMessageId, errorMessage.toString());
+
+        // Показываем интерфейс для добавления сайтов снова
+        sendNewInteractiveInterface(chatId, "Выберите интересующие вас источники новостей:", InterfaceType.WEBSITES, user);
+      }
+    } catch (StringIndexOutOfBoundsException e) {
+      sendMessage(chatId, "Укажите название и URL сайта. Пример: " + ADD_WEBSITE_COMMAND + " РБК https://www.rbc.ru");
     } catch (Exception e) {
-      sendMessage(chatId, "Не удалось создать сайт. Возможно, такой сайт уже существует.");
+      log.error("Ошибка при добавлении сайта: {}", e.getMessage());
+      sendMessage(chatId, "Произошла ошибка при добавлении сайта. Пожалуйста, попробуйте позже.");
     }
   }
 
   private void startCommandReceived(long chatId, User user, String name) {
-    String answer = "Привет, " + name + "! Добро пожаловать в бот для рекомендации новостей.";
-    sendMessage(chatId, answer);
+    // Отправляем только приветственное сообщение отдельно
+    StringBuilder welcomeMessage = new StringBuilder();
+    welcomeMessage.append("Привет, ").append(name).append("! Добро пожаловать в бот для рекомендации новостей.");
+    sendMessage(chatId, welcomeMessage.toString());
 
     // Проверяем, есть ли у пользователя уже выбранные категории
     List<CategoryDTO> userCategories = categoriesService.getUserCategories(user);
 
     if (userCategories.isEmpty()) {
-      // Если категорий нет, предлагаем выбрать
-      sendMessage(chatId, "Для начала выберите интересующие вас категории новостей.");
-      sendCategoriesKeyboard(chatId, user);
+      // Если категорий нет, предлагаем выбрать через интерактивное сообщение
+      sendNewInteractiveInterface(chatId, "Для начала выберите интересующие вас категории новостей:", InterfaceType.CATEGORIES, user);
     } else {
-      // Если категории уже есть, показываем краткую справку
-      String categoriesInfo = "У вас уже выбраны категории: " +
-          userCategories.stream()
+      // Если категории уже есть, показываем информацию о них
+      StringBuilder statusMessage = new StringBuilder();
+      statusMessage.append("У вас уже выбраны категории: ")
+          .append(userCategories.stream()
               .map(CategoryDTO::getName)
-              .collect(Collectors.joining(", "));
+              .collect(Collectors.joining(", ")));
 
       List<WebsiteDTO> userWebsites = websitesService.getUserWebsites(user);
 
       if (userWebsites.isEmpty()) {
-        sendMessage(chatId, categoriesInfo + "\n\nТеперь выберите интересующие вас сайты.");
-        sendWebsitesKeyboard(chatId, user);
+        statusMessage.append("\n\nТеперь выберите интересующие вас сайты:");
+        // Отправляем интерактивное сообщение с выбором сайтов
+        sendNewInteractiveInterface(chatId, statusMessage.toString(), InterfaceType.WEBSITES, user);
       } else {
-        String websitesInfo = "Выбранные источники новостей: " +
-            userWebsites.stream()
+        statusMessage.append("\n\nВыбранные источники новостей: ")
+            .append(userWebsites.stream()
                 .map(WebsiteDTO::getName)
-                .collect(Collectors.joining(", "));
+                .collect(Collectors.joining(", ")));
 
-        sendMessage(chatId, categoriesInfo + "\n\n" + websitesInfo);
-
-        // Показываем главное меню
-        showMainMenu(chatId);
+        // Отправляем интерактивное сообщение с главным меню
+        sendNewInteractiveInterface(chatId, statusMessage.toString(), InterfaceType.MAIN_MENU, user);
       }
     }
   }
 
-  private void sendCategoriesKeyboard(long chatId, User user) {
-    List<CategoryDTO> defaultCategories = categoriesService.getDefaultCategories();
-
-    if (defaultCategories.isEmpty()) {
-      sendMessage(chatId, "Категории пока недоступны");
-      return;
-    }
-
-    SendMessage message = new SendMessage();
-    message.setChatId(String.valueOf(chatId));
-    message.setText("Выберите интересующие вас категории новостей:");
-
-    InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
-    List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-
-    // Получаем категории пользователя для исключения уже выбранных
-    List<CategoryDTO> userCategories = categoriesService.getUserCategories(user);
-    List<Long> userCategoryIds = userCategories.stream()
-        .map(CategoryDTO::getId)
-        .toList();
-
-    // Добавляем кнопки только для категорий, которые пользователь еще не выбрал
-    for (CategoryDTO category : defaultCategories) {
-      // Пропускаем уже выбранные категории
-      if (userCategoryIds.contains(category.getId())) {
-        continue;
-      }
-
-      List<InlineKeyboardButton> rowInline = new ArrayList<>();
-      InlineKeyboardButton categoryButton = new InlineKeyboardButton();
-      categoryButton.setText(category.getName());
-      categoryButton.setCallbackData("category_" + category.getId());
-      rowInline.add(categoryButton);
-      rowsInline.add(rowInline);
-    }
-
-    // Если нет новых категорий для добавления
-    if (rowsInline.isEmpty()) {
-      if (userCategories.isEmpty()) {
-        sendMessage(chatId, "Категории пока недоступны. Чтобы добавить свою категорию, используйте команду " +
-            ADD_CATEGORY_COMMAND + " ИМЯ_КАТЕГОРИИ");
-      } else {
-        sendMessage(chatId, "Вы уже выбрали все доступные категории. Переходим к выбору сайтов.");
-        sendWebsitesKeyboard(chatId, user);
-      }
-      return;
-    }
-
-    // Добавляем кнопку для создания своей категории
-    List<InlineKeyboardButton> customCategoryRow = new ArrayList<>();
-    InlineKeyboardButton customCategoryButton = new InlineKeyboardButton();
-    customCategoryButton.setText("Добавить свою категорию");
-    customCategoryButton.setCallbackData("add_custom_category");
-    customCategoryRow.add(customCategoryButton);
-    rowsInline.add(customCategoryRow);
-
-    // Если у пользователя уже есть категории, добавляем кнопку для перехода к выбору сайтов
-    if (!userCategories.isEmpty()) {
-      List<InlineKeyboardButton> continueToWebsitesRow = new ArrayList<>();
-      InlineKeyboardButton continueToWebsitesButton = new InlineKeyboardButton();
-      continueToWebsitesButton.setText("Перейти к выбору сайтов");
-      continueToWebsitesButton.setCallbackData("continue_to_websites");
-      continueToWebsitesRow.add(continueToWebsitesButton);
-      rowsInline.add(continueToWebsitesRow);
-    }
-
-    markupInline.setKeyboard(rowsInline);
-    message.setReplyMarkup(markupInline);
-
-    try {
-      execute(message);
-    } catch (TelegramApiException e) {
-      log.error("Ошибка при отправке клавиатуры категорий: {}", e.getMessage());
-    }
-  }
-
-  private void sendWebsitesKeyboard(long chatId, User user) {
-    List<WebsiteDTO> defaultWebsites = websitesService.getDefaultWebsites();
-
-    if (defaultWebsites.isEmpty()) {
-      sendMessage(chatId, "Источники новостей пока недоступны");
-      return;
-    }
-
-    SendMessage message = new SendMessage();
-    message.setChatId(String.valueOf(chatId));
-    message.setText("Выберите интересующие вас источники новостей:");
-
-    InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
-    List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-
-    // Получаем сайты пользователя для исключения уже выбранных
-    List<WebsiteDTO> userWebsites = websitesService.getUserWebsites(user);
-    List<Long> userWebsiteIds = userWebsites.stream()
-        .map(WebsiteDTO::getId)
-        .toList();
-
-    // Добавляем кнопки только для сайтов, которые пользователь еще не выбрал
-    for (WebsiteDTO website : defaultWebsites) {
-      // Пропускаем уже выбранные сайты
-      if (userWebsiteIds.contains(website.getId())) {
-        continue;
-      }
-
-      List<InlineKeyboardButton> rowInline = new ArrayList<>();
-      InlineKeyboardButton websiteButton = new InlineKeyboardButton();
-      websiteButton.setText(website.getName());
-      websiteButton.setCallbackData("website_" + website.getId());
-      rowInline.add(websiteButton);
-      rowsInline.add(rowInline);
-    }
-
-    // Если нет новых сайтов для добавления
-    if (rowsInline.isEmpty()) {
-      if (userWebsites.isEmpty()) {
-        sendMessage(chatId, "Источники новостей пока недоступны. Чтобы добавить свой источник, используйте команду " +
-            ADD_WEBSITE_COMMAND + " НАЗВАНИЕ URL");
-      } else {
-        sendMessage(chatId, "Вы уже выбрали все доступные источники. Настройка завершена!");
-      }
-      return;
-    }
-
-    // Добавляем кнопку для создания своего сайта
-    List<InlineKeyboardButton> customWebsiteRow = new ArrayList<>();
-    InlineKeyboardButton customWebsiteButton = new InlineKeyboardButton();
-    customWebsiteButton.setText("Добавить свой источник");
-    customWebsiteButton.setCallbackData("add_custom_website");
-    customWebsiteRow.add(customWebsiteButton);
-    rowsInline.add(customWebsiteRow);
-
-    // Если у пользователя уже есть сайты, добавляем кнопку для завершения настройки
-    if (!userWebsites.isEmpty()) {
-      List<InlineKeyboardButton> setupCompleteRow = new ArrayList<>();
-      InlineKeyboardButton setupCompleteButton = new InlineKeyboardButton();
-      setupCompleteButton.setText("Завершить настройку");
-      setupCompleteButton.setCallbackData("setup_complete");
-      setupCompleteRow.add(setupCompleteButton);
-      rowsInline.add(setupCompleteRow);
-    }
-
-    markupInline.setKeyboard(rowsInline);
-    message.setReplyMarkup(markupInline);
-
-    try {
-      execute(message);
-    } catch (TelegramApiException e) {
-      log.error("Ошибка при отправке клавиатуры сайтов: {}", e.getMessage());
-    }
-  }
-
+  /**
+   * Обновляет существующее сообщение или отправляет новое, если обновление невозможно
+   */
   public void sendMessage(long chatId, String textToSend) {
+    Integer lastMessageId = lastMessageIds.get(chatId);
+
+    if (lastMessageId != null) {
+      // Пробуем обновить существующее сообщение
+      try {
+        EditMessageText editMessage = new EditMessageText();
+        editMessage.setChatId(String.valueOf(chatId));
+        editMessage.setMessageId(lastMessageId);
+        editMessage.setText(textToSend);
+        execute(editMessage);
+        return; // Если обновление успешно, выходим из метода
+      } catch (TelegramApiException e) {
+        // В случае ошибки обновления (например, сообщение слишком старое или удалено)
+        // продолжаем выполнение для отправки нового сообщения
+        log.debug("Не удалось обновить сообщение: {}", e.getMessage());
+      }
+    }
+
+    // Отправляем новое сообщение
     SendMessage message = new SendMessage();
     message.setChatId(String.valueOf(chatId));
     message.setText(textToSend);
     try {
-      execute(message);
+      Message sentMessage = execute(message);
+      // Сохраняем ID отправленного сообщения
+      lastMessageIds.put(chatId, sentMessage.getMessageId());
     } catch (TelegramApiException e) {
-      log.error("Error occurred: {}", e.getMessage());
+      log.error("Ошибка при отправке сообщения: {}", e.getMessage());
+    }
+  }
+
+  /**
+   * Отправляет сообщение с клавиатурой
+   */
+  public Message sendMessageWithKeyboard(long chatId, String text, InlineKeyboardMarkup markup) {
+    SendMessage message = new SendMessage();
+    message.setChatId(String.valueOf(chatId));
+    message.setText(text);
+    message.setReplyMarkup(markup);
+
+    try {
+      Message sentMessage = execute(message);
+      // Сохраняем ID отправленного сообщения
+      lastMessageIds.put(chatId, sentMessage.getMessageId());
+      return sentMessage;
+    } catch (TelegramApiException e) {
+      log.error("Ошибка при отправке сообщения с клавиатурой: {}", e.getMessage());
+      return null;
+    }
+  }
+
+  /**
+   * Обновляет сообщение с клавиатурой
+   */
+  public void updateMessageWithKeyboard(long chatId, int messageId, String text, InlineKeyboardMarkup markup) {
+    EditMessageText editMessage = new EditMessageText();
+    editMessage.setChatId(String.valueOf(chatId));
+    editMessage.setMessageId(messageId);
+    editMessage.setText(text);
+    editMessage.setReplyMarkup(markup);
+
+    try {
+      execute(editMessage);
+    } catch (TelegramApiException e) {
+      if (e.getMessage().contains("message is not modified")) {
+        // Если сообщение не изменилось, просто игнорируем ошибку
+        log.debug("Сообщение не требует обновления: {}", e.getMessage());
+      } else {
+        // Для других ошибок отправляем новое сообщение
+        log.error("Ошибка при обновлении сообщения с клавиатурой: {}", e.getMessage());
+        sendMessageWithKeyboard(chatId, text, markup);
+      }
     }
   }
 
@@ -664,45 +684,7 @@ public class TelegramBot extends TelegramLongPollingBot {
    * Показывает главное меню с кнопками выбора категорий, сайтов и настроек
    */
   private void showMainMenu(long chatId) {
-    SendMessage message = new SendMessage();
-    message.setChatId(String.valueOf(chatId));
-    message.setText("Главное меню:");
-
-    InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
-    List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-
-    // Кнопка выбора категорий
-    List<InlineKeyboardButton> categoriesRow = new ArrayList<>();
-    InlineKeyboardButton categoriesButton = new InlineKeyboardButton();
-    categoriesButton.setText("Выбор категорий");
-    categoriesButton.setCallbackData("open_categories");
-    categoriesRow.add(categoriesButton);
-    rowsInline.add(categoriesRow);
-
-    // Кнопка выбора сайтов
-    List<InlineKeyboardButton> websitesRow = new ArrayList<>();
-    InlineKeyboardButton websitesButton = new InlineKeyboardButton();
-    websitesButton.setText("Выбор источников новостей");
-    websitesButton.setCallbackData("open_websites");
-    websitesRow.add(websitesButton);
-    rowsInline.add(websitesRow);
-
-    // Кнопка настроек
-    List<InlineKeyboardButton> settingsRow = new ArrayList<>();
-    InlineKeyboardButton settingsButton = new InlineKeyboardButton();
-    settingsButton.setText("Настройки");
-    settingsButton.setCallbackData("open_settings");
-    settingsRow.add(settingsButton);
-    rowsInline.add(settingsRow);
-
-    markupInline.setKeyboard(rowsInline);
-    message.setReplyMarkup(markupInline);
-
-    try {
-      execute(message);
-    } catch (TelegramApiException e) {
-      log.error("Ошибка при отправке главного меню: {}", e.getMessage());
-    }
+    sendInteractiveInterface(chatId, "Главное меню:", InterfaceType.MAIN_MENU, null);
   }
 
   /**
@@ -711,63 +693,28 @@ public class TelegramBot extends TelegramLongPollingBot {
   private void showSettingsMenu(long chatId, User user) {
     try {
       // Получаем активное расписание пользователя через сервис
-      NotificationScheduleDTO scheduleDTO = notificationScheduleService.getActiveScheduleDTO(user);
+      NotificationScheduleDTO scheduleDTO = notificationScheduleService.getActiveScheduleDTO(user.getId());
       if (scheduleDTO == null) {
         sendMessage(chatId, "Ошибка при загрузке настроек");
         return;
       }
 
-      SendMessage message = new SendMessage();
-      message.setChatId(String.valueOf(chatId));
       String settings = "Настройки:\n\n" + String.format("Период получения уведомлений: с %d:00 до %d:00\n",
           scheduleDTO.getStartHour(), scheduleDTO.getEndHour()) +
           String.format("Статус уведомлений: %s\n\n",
               scheduleDTO.getIsActive() ? "Включены" : "Отключены");
 
-      message.setText(settings);
-      InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
-      List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-
-      // Кнопка изменения времени получения уведомлений
-      List<InlineKeyboardButton> timeSettingsRow = new ArrayList<>();
-      InlineKeyboardButton timeSettingsButton = new InlineKeyboardButton();
-      timeSettingsButton.setText("Изменить время уведомлений");
-      timeSettingsButton.setCallbackData("change_notification_time");
-      timeSettingsRow.add(timeSettingsButton);
-      rowsInline.add(timeSettingsRow);
-
-      // Кнопка включения/отключения уведомлений
-      List<InlineKeyboardButton> toggleRow = new ArrayList<>();
-      InlineKeyboardButton toggleButton = new InlineKeyboardButton();
-      toggleButton.setText(Boolean.TRUE.equals(scheduleDTO.getIsActive()) ?
-          "Отключить уведомления" : "Включить уведомления");
-      toggleButton.setCallbackData("toggle_notifications");
-      toggleRow.add(toggleButton);
-      rowsInline.add(toggleRow);
-
-      // Кнопка удаления аккаунта
-      List<InlineKeyboardButton> deleteAccountRow = new ArrayList<>();
-      InlineKeyboardButton deleteAccountButton = new InlineKeyboardButton();
-      deleteAccountButton.setText("Удалить аккаунт");
-      deleteAccountButton.setCallbackData("delete_account_confirm");
-      deleteAccountRow.add(deleteAccountButton);
-      rowsInline.add(deleteAccountRow);
-
-      // Кнопка возврата в главное меню
-      List<InlineKeyboardButton> backRow = new ArrayList<>();
-      InlineKeyboardButton backButton = new InlineKeyboardButton();
-      backButton.setText("↩️ Назад в главное меню");
-      backButton.setCallbackData("back_to_main_menu");
-      backRow.add(backButton);
-      rowsInline.add(backRow);
-
-      markupInline.setKeyboard(rowsInline);
-      message.setReplyMarkup(markupInline);
-
-      execute(message);
-    } catch (TelegramApiException e) {
-      log.error("Ошибка при отправке меню настроек: {}", e.getMessage());
+      // Получаем текущее сообщение
+      Integer lastMessageId = lastMessageIds.get(chatId);
+      if (lastMessageId != null) {
+        // Пробуем обновить существующее сообщение
+        updateMessageWithKeyboard(chatId, lastMessageId, settings, createSettingsKeyboard(user));
+      } else {
+        // Если нет сохраненного ID сообщения, отправляем новое
+        sendInteractiveInterface(chatId, settings, InterfaceType.SETTINGS, user);
+      }
     } catch (Exception e) {
+      log.error("Ошибка при загрузке настроек: {}", e.getMessage());
       sendMessage(chatId, "Произошла ошибка при загрузке настроек");
     }
   }
@@ -782,15 +729,12 @@ public class TelegramBot extends TelegramLongPollingBot {
           "Шаг 2: Выберите час окончания получения уведомлений:";
 
       // Получаем активное расписание пользователя через сервис
-      NotificationScheduleDTO scheduleDTO = notificationScheduleService.getActiveScheduleDTO(user);
+      NotificationScheduleDTO scheduleDTO = notificationScheduleService.getActiveScheduleDTO(user.getId());
       if (scheduleDTO == null) {
         sendMessage(chatId, "Ошибка при загрузке настроек");
         return;
       }
 
-      SendMessage message = new SendMessage();
-      message.setChatId(String.valueOf(chatId));
-      message.setText(title);
       InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
       List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
 
@@ -833,7 +777,7 @@ public class TelegramBot extends TelegramLongPollingBot {
           String callbackPrefix = isStartTime ? "set_start_hour" : "set_end_hour";
           String callbackData = callbackPrefix + "_" + hour;
           hourButton.setCallbackData(callbackData);
-          
+
           row.add(hourButton);
         }
 
@@ -857,13 +801,8 @@ public class TelegramBot extends TelegramLongPollingBot {
       cancelButton.setCallbackData("back_to_settings");
       cancelRow.add(cancelButton);
       rowsInline.add(cancelRow);
-
       markupInline.setKeyboard(rowsInline);
-      message.setReplyMarkup(markupInline);
-
-      execute(message);
-    } catch (TelegramApiException e) {
-      log.error("Ошибка при отправке меню выбора времени: {}", e.getMessage());
+      sendMessageWithKeyboard(chatId, title, markupInline);
     } catch (Exception e) {
       sendMessage(chatId, "Произошла ошибка при загрузке настроек");
     }
@@ -873,12 +812,10 @@ public class TelegramBot extends TelegramLongPollingBot {
    * Показывает меню подтверждения удаления аккаунта
    */
   private void showDeleteConfirmation(long chatId) {
-    SendMessage message = new SendMessage();
-    message.setChatId(String.valueOf(chatId));
-    message.setText("""
+    String messageText = """
         Вы уверены, что хотите удалить свой аккаунт?
         Все ваши настройки, выбранные категории и источники будут удалены безвозвратно.
-        """);
+        """;
 
     InlineKeyboardMarkup markupInline = new InlineKeyboardMarkup();
     List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
@@ -896,12 +833,672 @@ public class TelegramBot extends TelegramLongPollingBot {
     confirmRow.add(confirmButton);
     rowsInline.add(confirmRow);
     markupInline.setKeyboard(rowsInline);
-    message.setReplyMarkup(markupInline);
+    sendMessageWithKeyboard(chatId, messageText, markupInline);
+  }
+
+  /**
+   * Отправляет или обновляет интерактивное сообщение с соответствующим интерфейсом
+   */
+  private void sendInteractiveInterface(long chatId, String text, InterfaceType type, User user) {
+    InlineKeyboardMarkup markup = null;
+    switch (type) {
+      case MAIN_MENU:
+        markup = createMainMenuKeyboard();
+        break;
+      case CATEGORIES:
+        markup = createCategoriesKeyboard(user);
+        break;
+      case WEBSITES:
+        markup = createWebsitesKeyboard(user);
+        break;
+      case USER_CATEGORIES:
+        markup = createUserCategoriesKeyboard(user);
+        break;
+      case USER_WEBSITES:
+        markup = createUserWebsitesKeyboard(user);
+        break;
+      case SETTINGS:
+        markup = createSettingsKeyboard(user);
+        break;
+      case TIME_SELECTION:
+        break;
+    }
+
+    Integer lastMessageId = lastMessageIds.get(chatId);
+
+    if (lastMessageId != null) {
+      // Пробуем обновить существующее сообщение
+      try {
+        updateMessageWithKeyboard(chatId, lastMessageId, text, markup);
+        return;
+      } catch (Exception e) {
+        log.debug("Не удалось обновить интерактивное сообщение: {}", e.getMessage());
+        // Если не удалось обновить, продолжаем и отправляем новое сообщение
+      }
+    }
+
+    // Отправляем новое сообщение
+    sendMessageWithKeyboard(chatId, text, markup);
+  }
+
+  /**
+   * Создает клавиатуру для главного меню
+   */
+  private InlineKeyboardMarkup createMainMenuKeyboard() {
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+    // Кнопка выбора категорий
+    List<InlineKeyboardButton> categoriesRow = new ArrayList<>();
+    InlineKeyboardButton categoriesButton = new InlineKeyboardButton();
+    categoriesButton.setText("Выбор категорий");
+    categoriesButton.setCallbackData("open_categories");
+    categoriesRow.add(categoriesButton);
+    rows.add(categoriesRow);
+
+    // Кнопка выбора сайтов
+    List<InlineKeyboardButton> websitesRow = new ArrayList<>();
+    InlineKeyboardButton websitesButton = new InlineKeyboardButton();
+    websitesButton.setText("Выбор источников новостей");
+    websitesButton.setCallbackData("open_websites");
+    websitesRow.add(websitesButton);
+    rows.add(websitesRow);
+
+    // Кнопка настроек
+    List<InlineKeyboardButton> settingsRow = new ArrayList<>();
+    InlineKeyboardButton settingsButton = new InlineKeyboardButton();
+    settingsButton.setText("Настройки");
+    settingsButton.setCallbackData("open_settings");
+    settingsRow.add(settingsButton);
+    rows.add(settingsRow);
+
+    markup.setKeyboard(rows);
+    return markup;
+  }
+
+  /**
+   * Создает клавиатуру для выбора категорий
+   */
+  private InlineKeyboardMarkup createCategoriesKeyboard(User user) {
+    List<CategoryDTO> defaultCategories = categoriesService.getDefaultCategories();
+    List<CategoryDTO> userCategories = categoriesService.getUserCategories(user);
+    List<Long> userCategoryIds = userCategories.stream()
+        .map(CategoryDTO::getId)
+        .toList();
+
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+    // Добавляем кнопки только для категорий, которые пользователь еще не выбрал
+    for (CategoryDTO category : defaultCategories) {
+      // Пропускаем уже выбранные категории
+      if (userCategoryIds.contains(category.getId())) {
+        continue;
+      }
+
+      List<InlineKeyboardButton> row = new ArrayList<>();
+      InlineKeyboardButton button = new InlineKeyboardButton();
+      button.setText(category.getName());
+      button.setCallbackData("category_" + category.getId());
+      row.add(button);
+      rows.add(row);
+    }
+
+    // Добавляем кнопку для создания своей категории
+    List<InlineKeyboardButton> customRow = new ArrayList<>();
+    InlineKeyboardButton customButton = new InlineKeyboardButton();
+    customButton.setText("Добавить свою категорию");
+    customButton.setCallbackData("add_custom_category");
+    customRow.add(customButton);
+    rows.add(customRow);
+
+    // Если у пользователя уже есть категории, добавляем кнопку для перехода к выбору сайтов
+    if (!userCategories.isEmpty()) {
+      List<InlineKeyboardButton> continueRow = new ArrayList<>();
+      InlineKeyboardButton continueButton = new InlineKeyboardButton();
+      continueButton.setText("Перейти к выбору сайтов");
+      continueButton.setCallbackData("continue_to_websites");
+      continueRow.add(continueButton);
+      rows.add(continueRow);
+    }
+
+    markup.setKeyboard(rows);
+    return markup;
+  }
+
+  /**
+   * Создает клавиатуру для выбора сайтов
+   */
+  private InlineKeyboardMarkup createWebsitesKeyboard(User user) {
+    List<WebsiteDTO> defaultWebsites = websitesService.getDefaultWebsites();
+    List<WebsiteDTO> userWebsites = websitesService.getUserWebsites(user);
+    List<Long> userWebsiteIds = userWebsites.stream()
+        .map(WebsiteDTO::getId)
+        .toList();
+
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+    // Добавляем кнопки только для сайтов, которые пользователь еще не выбрал
+    for (WebsiteDTO website : defaultWebsites) {
+      // Пропускаем уже выбранные сайты
+      if (userWebsiteIds.contains(website.getId())) {
+        continue;
+      }
+
+      List<InlineKeyboardButton> row = new ArrayList<>();
+      InlineKeyboardButton button = new InlineKeyboardButton();
+      button.setText(website.getName());
+      button.setCallbackData("website_" + website.getId());
+      row.add(button);
+      rows.add(row);
+    }
+
+    // Добавляем кнопку для создания своего сайта
+    List<InlineKeyboardButton> customRow = new ArrayList<>();
+    InlineKeyboardButton customButton = new InlineKeyboardButton();
+    customButton.setText("Добавить свой источник");
+    customButton.setCallbackData("add_custom_website");
+    customRow.add(customButton);
+    rows.add(customRow);
+
+    // Если у пользователя уже есть сайты, добавляем кнопку для завершения настройки
+    if (!userWebsites.isEmpty()) {
+      List<InlineKeyboardButton> completeRow = new ArrayList<>();
+      InlineKeyboardButton completeButton = new InlineKeyboardButton();
+      completeButton.setText("Завершить настройку");
+      completeButton.setCallbackData("setup_complete");
+      completeRow.add(completeButton);
+      rows.add(completeRow);
+    }
+
+    markup.setKeyboard(rows);
+    return markup;
+  }
+
+  /**
+   * Создает клавиатуру для просмотра категорий пользователя
+   */
+  private InlineKeyboardMarkup createUserCategoriesKeyboard(User user) {
+    List<CategoryDTO> userCategories = categoriesService.getUserCategories(user);
+
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+    // Добавляем кнопки для каждой категории пользователя с возможностью удаления
+    for (CategoryDTO category : userCategories) {
+      List<InlineKeyboardButton> row = new ArrayList<>();
+
+      InlineKeyboardButton nameButton = new InlineKeyboardButton();
+      nameButton.setText(category.getName());
+      nameButton.setCallbackData("info_category_" + category.getId());
+      row.add(nameButton);
+
+      // Кнопка для удаления категории
+      InlineKeyboardButton deleteButton = new InlineKeyboardButton();
+      deleteButton.setText("❌");
+      deleteButton.setCallbackData("remove_category_" + category.getId());
+      row.add(deleteButton);
+
+      rows.add(row);
+    }
+
+    // Добавляем кнопку для добавления категорий
+    List<InlineKeyboardButton> addRow = new ArrayList<>();
+    InlineKeyboardButton addButton = new InlineKeyboardButton();
+    addButton.setText("Добавить еще категории");
+    addButton.setCallbackData("add_more_categories");
+    addRow.add(addButton);
+    rows.add(addRow);
+
+    // Добавляем кнопку для перехода к выбору сайтов
+    List<InlineKeyboardButton> continueRow = new ArrayList<>();
+    InlineKeyboardButton continueButton = new InlineKeyboardButton();
+    continueButton.setText("Перейти к выбору сайтов");
+    continueButton.setCallbackData("continue_to_websites");
+    continueRow.add(continueButton);
+    rows.add(continueRow);
+
+    markup.setKeyboard(rows);
+    return markup;
+  }
+
+  /**
+   * Создает клавиатуру для просмотра сайтов пользователя
+   */
+  private InlineKeyboardMarkup createUserWebsitesKeyboard(User user) {
+    List<WebsiteDTO> userWebsites = websitesService.getUserWebsites(user);
+
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+    // Добавляем кнопки для каждого сайта пользователя с возможностью удаления
+    for (WebsiteDTO website : userWebsites) {
+      List<InlineKeyboardButton> row = new ArrayList<>();
+
+      InlineKeyboardButton nameButton = new InlineKeyboardButton();
+      nameButton.setText(website.getName());
+      nameButton.setCallbackData("info_website_" + website.getId());
+      row.add(nameButton);
+
+      // Кнопка для удаления сайта
+      InlineKeyboardButton deleteButton = new InlineKeyboardButton();
+      deleteButton.setText("❌");
+      deleteButton.setCallbackData("remove_website_" + website.getId());
+      row.add(deleteButton);
+
+      rows.add(row);
+    }
+
+    // Добавляем кнопку для добавления сайтов
+    List<InlineKeyboardButton> addRow = new ArrayList<>();
+    InlineKeyboardButton addButton = new InlineKeyboardButton();
+    addButton.setText("Добавить еще сайты");
+    addButton.setCallbackData("add_more_websites");
+    addRow.add(addButton);
+    rows.add(addRow);
+
+    // Добавляем кнопку для завершения настройки
+    List<InlineKeyboardButton> completeRow = new ArrayList<>();
+    InlineKeyboardButton completeButton = new InlineKeyboardButton();
+    completeButton.setText("Завершить настройку");
+    completeButton.setCallbackData("setup_complete");
+    completeRow.add(completeButton);
+    rows.add(completeRow);
+
+    markup.setKeyboard(rows);
+    return markup;
+  }
+
+  /**
+   * Создает клавиатуру для настроек
+   */
+  private InlineKeyboardMarkup createSettingsKeyboard(User user) {
+    NotificationScheduleDTO scheduleDTO = notificationScheduleService.getActiveScheduleDTO(user.getId());
+    if (scheduleDTO == null) {
+      return null;
+    }
+
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+    // Кнопка изменения времени получения уведомлений
+    List<InlineKeyboardButton> timeRow = new ArrayList<>();
+    InlineKeyboardButton timeButton = new InlineKeyboardButton();
+    timeButton.setText("Изменить время уведомлений");
+    timeButton.setCallbackData("change_notification_time");
+    timeRow.add(timeButton);
+    rows.add(timeRow);
+
+    // Кнопка включения/отключения уведомлений
+    List<InlineKeyboardButton> toggleRow = new ArrayList<>();
+    InlineKeyboardButton toggleButton = new InlineKeyboardButton();
+    toggleButton.setText(Boolean.TRUE.equals(scheduleDTO.getIsActive()) ?
+        "Отключить уведомления" : "Включить уведомления");
+    toggleButton.setCallbackData("toggle_notifications");
+    toggleRow.add(toggleButton);
+    rows.add(toggleRow);
+
+    // Кнопка удаления аккаунта
+    List<InlineKeyboardButton> deleteRow = new ArrayList<>();
+    InlineKeyboardButton deleteButton = new InlineKeyboardButton();
+    deleteButton.setText("Удалить аккаунт");
+    deleteButton.setCallbackData("delete_account_confirm");
+    deleteRow.add(deleteButton);
+    rows.add(deleteRow);
+
+    // Кнопка возврата в главное меню
+    List<InlineKeyboardButton> backRow = new ArrayList<>();
+    InlineKeyboardButton backButton = new InlineKeyboardButton();
+    backButton.setText("↩️ Назад в главное меню");
+    backButton.setCallbackData("back_to_main_menu");
+    backRow.add(backButton);
+    rows.add(backRow);
+
+    markup.setKeyboard(rows);
+    return markup;
+  }
+
+  /**
+   * Отправляет новое интерактивное сообщение без попытки обновления существующего
+   */
+  private void sendNewInteractiveInterface(long chatId, String text, InterfaceType type, User user) {
+    InlineKeyboardMarkup markup = null;
+    switch (type) {
+      case MAIN_MENU:
+        markup = createMainMenuKeyboard();
+        break;
+      case CATEGORIES:
+        markup = createCategoriesKeyboard(user);
+        break;
+      case WEBSITES:
+        markup = createWebsitesKeyboard(user);
+        break;
+      case USER_CATEGORIES:
+        markup = createUserCategoriesKeyboard(user);
+        break;
+      case USER_WEBSITES:
+        markup = createUserWebsitesKeyboard(user);
+        break;
+      case SETTINGS:
+        markup = createSettingsKeyboard(user);
+        break;
+      case TIME_SELECTION:
+        break;
+    }
+
+    sendMessageWithKeyboard(chatId, text, markup);
+  }
+
+  /**
+   * Показывает главное меню через новое сообщение
+   */
+  private void showMainMenuWithNewMessage(long chatId) {
+    sendNewInteractiveInterface(chatId, "Главное меню:", InterfaceType.MAIN_MENU, null);
+  }
+
+  /**
+   * Показывает категории пользователя через новое сообщение
+   */
+  private void showUserCategoriesWithNewMessage(long chatId, User user) {
+    List<CategoryDTO> userCategories = categoriesService.getUserCategories(user);
+
+    if (userCategories.isEmpty()) {
+      sendMessage(chatId, "У вас пока нет выбранных категорий. Используйте /categories чтобы выбрать категории.");
+      return;
+    }
+
+    sendNewInteractiveInterface(chatId, "Ваши категории:", InterfaceType.USER_CATEGORIES, user);
+  }
+
+  /**
+   * Показывает сайты пользователя через новое сообщение
+   */
+  private void showUserWebsitesWithNewMessage(long chatId, User user) {
+    List<WebsiteDTO> userWebsites = websitesService.getUserWebsites(user);
+
+    if (userWebsites.isEmpty()) {
+      sendMessage(chatId, "У вас пока нет выбранных сайтов. Используйте /websites чтобы выбрать источники новостей.");
+      return;
+    }
+
+    sendNewInteractiveInterface(chatId, "Ваши источники новостей:", InterfaceType.USER_WEBSITES, user);
+  }
+
+  /**
+   * Обрабатывает сообщения пользователя в контексте текущего диалога
+   */
+  private void handleDialogMessage(long chatId, User user, Long userId, String messageText, DialogState state) {
+    switch (state) {
+      case WAITING_CATEGORY_NAME:
+        // Обрабатываем ввод названия категории
+        handleCategoryNameInput(chatId, user, userId, messageText);
+        break;
+      case WAITING_WEBSITE_NAME:
+        // Обрабатываем ввод названия сайта
+        handleWebsiteNameInput(chatId, user, userId, messageText);
+        break;
+      case WAITING_WEBSITE_URL:
+        // Обрабатываем ввод URL сайта
+        handleWebsiteUrlInput(chatId, user, userId, messageText);
+        break;
+      default:
+        // Неизвестное состояние - отменяем диалог
+        cancelDialog(chatId, userId);
+        sendMessage(chatId, "Произошла ошибка в диалоге. Пожалуйста, попробуйте снова.");
+    }
+  }
+
+  /**
+   * Запускает диалог для добавления категории
+   */
+  private void startAddCategoryDialog(long chatId, Long userId) {
+    // Отправляем сообщение с запросом названия категории
+    sendMessage(chatId, "Пожалуйста, введите название новой категории.");
+
+    // Устанавливаем состояние диалога
+    userDialogStates.put(userId, DialogState.WAITING_CATEGORY_NAME);
+  }
+
+  /**
+   * Обрабатывает ввод названия категории
+   */
+  private void handleCategoryNameInput(long chatId, User user, Long userId, String categoryName) {
+    // Отправляем сообщение о начале обработки
+    Integer processingMessageId = sendMessageAndGetId(chatId, "⌛ Проверяем и добавляем категорию...");
 
     try {
-      execute(message);
-    } catch (TelegramApiException e) {
-      log.error("Ошибка при отправке подтверждения удаления: {}", e.getMessage());
+      // Проверяем название через нейросеть
+      UserInputValidator.ValidationResult validationResult = userInputValidator.validateCategoryName(categoryName);
+
+      if (validationResult.isValid()) {
+        // Если название валидно, добавляем категорию
+        String validCategoryName = validationResult.getCorrectedValue();
+
+        Category newCategory = new Category();
+        newCategory.setName(validCategoryName);
+        CategoryDTO categoryDTO = categoriesService.createCategory(user, newCategory);
+
+        // Автоматически добавляем категорию пользователю
+        categoriesService.chooseCategory(user, categoryDTO.getId());
+
+        // Обновляем сообщение о результате
+        updateMessage(chatId, processingMessageId, String.format("✅ Категория \"%s\" успешно добавлена!", validCategoryName));
+
+        // Показываем обновленный список категорий
+        sendNewInteractiveInterface(chatId, "Ваши категории:", InterfaceType.USER_CATEGORIES, user);
+
+        // Завершаем диалог
+        cancelDialog(chatId, userId);
+      } else {
+        // Если название не валидно, сообщаем об ошибке
+        updateMessage(chatId, processingMessageId, String.format("❌ Ошибка: %s\n\nПопробуйте ввести другое название.", validationResult.getExplanation()));
+
+        // Показываем интерфейс для добавления категорий снова
+        sendNewInteractiveInterface(chatId, "Выберите интересующие вас категории новостей:", InterfaceType.CATEGORIES, user);
+      }
+    } catch (ResponseStatusException e) {
+      if (e.getStatusCode() == HttpStatus.CONFLICT) {
+        // Если категория уже существует, показываем список доступных категорий
+        List<CategoryDTO> defaultCategories = categoriesService.getDefaultCategories();
+        StringBuilder message = new StringBuilder();
+        message.append("❌ Категория с таким названием уже существует.\n\n");
+        message.append("Доступные категории:\n");
+        for (CategoryDTO category : defaultCategories) {
+          message.append("- ").append(category.getName()).append("\n");
+        }
+        message.append("\nВыберите одну из существующих категорий или введите другое название.");
+
+        updateMessage(chatId, processingMessageId, message.toString());
+        sendNewInteractiveInterface(chatId, "Выберите интересующие вас категории новостей:", InterfaceType.CATEGORIES, user);
+      } else {
+        updateMessage(chatId, processingMessageId, "❌ Произошла ошибка при создании категории. Попробуйте позже.");
+      }
+    } catch (Exception e) {
+      log.error("Ошибка при добавлении категории: {}", e.getMessage());
+      updateMessage(chatId, processingMessageId, "❌ Произошла ошибка при добавлении категории. Попробуйте позже.");
     }
+  }
+
+  /**
+   * Запускает диалог для добавления сайта
+   */
+  private void startAddWebsiteDialog(long chatId, Long userId) {
+    // Отправляем сообщение с запросом названия сайта
+    sendMessage(chatId, "Пожалуйста, введите название нового источника новостей.");
+
+    // Устанавливаем состояние диалога
+    userDialogStates.put(userId, DialogState.WAITING_WEBSITE_NAME);
+  }
+
+  /**
+   * Обрабатывает ввод названия сайта
+   */
+  private void handleWebsiteNameInput(long chatId, User user, Long userId, String websiteName) {
+    // Проверяем, что название не пустое
+    String trimmedName = websiteName.trim();
+    if (trimmedName.isEmpty()) {
+      sendMessage(chatId, "Название источника не может быть пустым.");
+      return;
+    }
+
+    try {
+      // Проверяем название через нейросеть
+      UserInputValidator.ValidationResult validationResult = userInputValidator.validateWebsiteName(trimmedName);
+
+      if (validationResult.isValid()) {
+        // Если название валидно, сохраняем его и запрашиваем URL
+        String validWebsiteName = validationResult.getCorrectedValue();
+
+        // Сохраняем название для использования при вводе URL
+        tempDialogData.put(userId, validWebsiteName);
+
+        // Переходим к следующему шагу диалога
+        userDialogStates.put(userId, DialogState.WAITING_WEBSITE_URL);
+
+        // Если название было исправлено нейросетью, сообщаем об этом
+        if (!trimmedName.equals(validWebsiteName)) {
+          sendMessage(chatId, String.format("Название было исправлено на \"%s\".\n\nТеперь, пожалуйста, введите URL источника (например, https://www.example.com).", validWebsiteName));
+        } else {
+          sendMessage(chatId, "Теперь, пожалуйста, введите URL источника (например, https://www.example.com).");
+        }
+      } else {
+        // Если название не валидно, сообщаем об ошибке
+        sendMessage(chatId, String.format("❌ Ошибка: %s\n\nПопробуйте ввести другое название.", validationResult.getExplanation()));
+      }
+    } catch (Exception e) {
+      log.error("Ошибка при проверке названия сайта: {}", e.getMessage());
+      sendMessage(chatId, "Произошла ошибка при проверке названия. Попробуйте еще раз.");
+    }
+  }
+
+  /**
+   * Обрабатывает ввод URL сайта
+   */
+  private void handleWebsiteUrlInput(long chatId, User user, Long userId, String websiteUrl) {
+    // Проверяем, что URL не пустой
+    String trimmedUrl = websiteUrl.trim();
+    if (trimmedUrl.isEmpty()) {
+      sendMessage(chatId, "URL не может быть пустым. Попробуйте еще раз.");
+      return;
+    }
+
+    // Получаем сохраненное название сайта
+    String websiteName = tempDialogData.get(userId);
+    if (websiteName == null) {
+      // Если название не найдено, начинаем диалог заново
+      sendMessage(chatId, "Произошла ошибка: название сайта не найдено. Пожалуйста, начните заново.");
+      startAddWebsiteDialog(chatId, userId);
+      return;
+    }
+
+    // Отправляем сообщение о начале обработки
+    Integer processingMessageId = sendMessageAndGetId(chatId, "⌛ Проверяем и добавляем источник новостей...");
+
+    try {
+      // Проверяем URL через curl
+      UserInputValidator.ValidationResult validationResult = userInputValidator.validateWebsiteUrl(trimmedUrl);
+
+      if (validationResult.isValid()) {
+        // Если URL валиден, добавляем сайт
+        String validWebsiteUrl = validationResult.getCorrectedValue();
+
+        Website newWebsite = new Website();
+        newWebsite.setName(websiteName);
+        newWebsite.setUrl(validWebsiteUrl);
+        WebsiteDTO websiteDTO = websitesService.createWebsite(user, newWebsite);
+
+        // Автоматически добавляем сайт пользователю
+        websitesService.chooseWebsite(user, websiteDTO.getId());
+
+        // Обновляем сообщение о результате
+        updateMessage(chatId, processingMessageId, String.format("✅ Источник \"%s\" (%s) успешно добавлен!", websiteName, validWebsiteUrl));
+
+        // Показываем обновленный список сайтов
+        sendNewInteractiveInterface(chatId, "Ваши источники новостей:", InterfaceType.USER_WEBSITES, user);
+
+        // Завершаем диалог
+        cancelDialog(chatId, userId);
+      } else {
+        // Если URL не валиден, сообщаем об ошибке
+        updateMessage(chatId, processingMessageId, String.format("❌ Ошибка: %s\n\nПопробуйте ввести корректный URL.", validationResult.getExplanation()));
+      }
+    } catch (Exception e) {
+      log.error("Ошибка при добавлении сайта: {}", e.getMessage());
+      updateMessage(chatId, processingMessageId, "Произошла ошибка при добавлении источника. Попробуйте еще раз.");
+    }
+  }
+
+  /**
+   * Отменяет текущий диалог пользователя
+   */
+  private void cancelDialog(long chatId, Long userId) {
+    userDialogStates.remove(userId);
+    tempDialogData.remove(userId);
+  }
+
+  private void deleteAccount(long chatId, long userId) {
+    try {
+      // Порядок важен для избежания проблем с внешними ключами
+      // 1. Получаем пользователя
+      User user = userService.getOrCreateUser(userId);
+
+      // 2. Очищаем связи пользователя с сайтами (не удаляя сами сайты)
+      List<WebsiteDTO> userWebsites = websitesService.getUserWebsites(user);
+      for (WebsiteDTO website : userWebsites) {
+        websitesService.removeWebsite(user, website.getId());
+      }
+
+      // 3. Очищаем связи пользователя с категориями (не удаляя сами категории)
+      List<CategoryDTO> userCategories = categoriesService.getUserCategories(user);
+      for (CategoryDTO category : userCategories) {
+        categoriesService.removeCategory(user, category.getId());
+      }
+
+      // 4. Удаляем расписания уведомлений пользователя
+      notificationScheduleService.deleteAllUserSchedules(user.getId());
+
+      // 5. Теперь удаляем аккаунт пользователя
+      userService.deleteUser(userId);
+
+      // Получаем messageId из callbackQuery
+      Integer messageId = lastMessageIds.get(chatId);
+      if (messageId != null) {
+        updateMessageWithKeyboard(chatId, messageId,
+            "Ваш аккаунт успешно удален. Все данные и настройки стерты.", null);
+      } else {
+        sendMessage(chatId, "Ваш аккаунт успешно удален. Все данные и настройки стерты.");
+      }
+    } catch (Exception e) {
+      log.error("Ошибка при удалении аккаунта: {}", e.getMessage(), e);
+      Integer messageId = lastMessageIds.get(chatId);
+      if (messageId != null) {
+        updateMessageWithKeyboard(chatId, messageId,
+            "Произошла ошибка при удалении аккаунта. Пожалуйста, попробуйте позже.", null);
+      } else {
+        sendMessage(chatId, "Произошла ошибка при удалении аккаунта. Пожалуйста, попробуйте позже.");
+      }
+    }
+  }
+
+  // enum для отслеживания состояния диалога пользователя
+  private enum DialogState {
+    NONE,                   // Нет активного диалога
+    WAITING_CATEGORY_NAME,  // Ожидаем ввода названия категории
+    WAITING_WEBSITE_NAME,   // Ожидаем ввода названия сайта
+    WAITING_WEBSITE_URL     // Ожидаем ввода URL сайта после ввода названия
+  }
+
+  /**
+   * Типы интерактивных интерфейсов для удобного управления обновлениями
+   */
+  private enum InterfaceType {
+    MAIN_MENU,
+    CATEGORIES,
+    WEBSITES,
+    USER_CATEGORIES,
+    USER_WEBSITES,
+    SETTINGS,
+    TIME_SELECTION
   }
 }
