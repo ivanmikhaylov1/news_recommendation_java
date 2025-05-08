@@ -6,16 +6,10 @@ import com.example.demo.domain.model.Category;
 import com.example.demo.domain.model.Website;
 import com.example.demo.parser.BaseParser;
 import com.example.demo.parser.RSSParser;
+import com.example.demo.parser.YandexTranslator;
 import com.example.demo.repository.ArticlesRepository;
 import com.example.demo.repository.CategoryRepository;
 import com.example.demo.repository.WebsiteRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
@@ -24,6 +18,12 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
@@ -36,6 +36,8 @@ public class ParserService {
   private final List<BaseParser> baseParsers;
 
   private final RSSParser rssParser;
+
+  private final YandexTranslator yandexTranslator;
 
   @Value("${parser.limit}")
   private int limitArticleCount;
@@ -74,7 +76,7 @@ public class ParserService {
                   parser.getArticle(newArticleUrl)
                           .thenAccept(
                                   optArticle -> optArticle.ifPresent(article -> {
-                                    saveArticle(article, website);
+                                    saveArticle(article, website, parser.getLanguage());
                                   })
                           )
                           .join();
@@ -106,6 +108,37 @@ public class ParserService {
                 }
               }
             });
+  }
+
+  private void saveArticle(ArticleDTO articleDTO, Website website, String language) {
+    if (language.equals("ru")) {
+      saveArticle(articleDTO, website);
+      return;
+    }
+
+    CompletableFuture<Optional<String>> translatedNameFuture = yandexTranslator.translate(
+        articleDTO.getName(), language, "ru");
+    CompletableFuture<Optional<String>> translatedDescriptionFuture = yandexTranslator.translate(
+        articleDTO.getDescription(), "en", "ru");
+
+    CompletableFuture.allOf(translatedNameFuture, translatedDescriptionFuture).thenAccept(v -> {
+      String translatedName = translatedNameFuture.join().orElseGet(() -> {
+        log.warn("Не удалось перевести заголовок статьи: {}", articleDTO.getName());
+        return articleDTO.getName();
+      });
+
+      String translatedDescription = translatedDescriptionFuture.join().orElseGet(() -> {
+        log.warn("Не удалось перевести описание статьи: {}", articleDTO.getUrl());
+        return articleDTO.getDescription();
+      });
+
+      articleDTO.setName(translatedName);
+      articleDTO.setDescription(translatedDescription);
+
+      log.debug("Статья {} переведена", articleDTO.getUrl());
+
+      saveArticle(articleDTO, website);
+    });
   }
 
   private void saveArticle(ArticleDTO articleDTO, Website website) {

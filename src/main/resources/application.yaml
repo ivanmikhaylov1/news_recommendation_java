@@ -55,3 +55,7 @@ telegram:
   bot:
     name: ttestpython_bot
     token: 6481641133:AAFCJ3MNNtM0ZnygPFh3cmUpwSIUF3PzOvA
+
+yandex:
+  token: *
+  folder-id: b1ge5mgjepbtdo48h05j
