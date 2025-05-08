@@ -2,6 +2,7 @@ package com.example.demo.parser.sites;
 
 import com.example.demo.domain.dto.ArticleDTO;
 import com.example.demo.parser.BaseParser;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -15,6 +16,11 @@ import java.util.concurrent.CompletableFuture;
 @Component
 @Slf4j
 public class InfoqParser extends BaseParser {
+  @Getter
+  private final String NAME = "Infoq";
+  @Getter
+  private final String language = "en";
+
   private static final String DOMAIN = "https://www.infoq.com";
   private static final String BLOG_LINK = "https://www.infoq.com/development";
 
@@ -58,11 +64,16 @@ public class InfoqParser extends BaseParser {
         }
       }
 
+      String date = "";
+      if (dateElement != null) {
+        date = dateElement.text().trim();
+      }
+
       return Optional.ofNullable(ArticleDTO.builder()
           .name(titleElement.text())
           .description(textBuilder.toString().trim())
           .url(link)
-          .date(dateElement.text())
+          .date(date)
           .build());
     } catch (Exception e) {
       log.error("Parsing error: {}", link, e);
