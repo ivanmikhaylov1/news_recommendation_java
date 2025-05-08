@@ -40,4 +40,3 @@ public interface UserRepository extends JpaRepository<User, Long> {
             """, nativeQuery = true)
     List<User> findUsersForArticle(@Param("article") Article article);
 }
-
