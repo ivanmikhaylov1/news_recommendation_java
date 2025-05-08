@@ -51,7 +51,7 @@ public class ParserService {
     List<CompletableFuture<Void>> futures = Arrays.stream(DefaultWebsiteIds.values())
         .map(value -> CompletableFuture.runAsync(() -> {
           try {
-            Optional<Website> website = websiteRepository.findByName(value.getName());
+            Optional<Website> website = websiteRepository.findByNameAndOwnerIsNull(value.getName());
             website.ifPresent(this::parseSite);
           } catch (Exception e) {
             log.error("Ошибка при парсинге сайта {}: {}", value, e.getMessage(), e);
