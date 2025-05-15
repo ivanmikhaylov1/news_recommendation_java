@@ -15,11 +15,16 @@ import io.github.cdimascio.dotenv.Dotenv;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import com.example.demo.repository.ArticlesRepository;
+import com.example.demo.repository.CategoryRepository;
+import com.example.demo.domain.model.Website;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Service
@@ -30,8 +35,47 @@ public class AIArticleParser implements SiteParser {
   private static final String ENDPOINT = dotenv.get("ENDPOINT");
   private static final String MODEL = dotenv.get("MODEL");
   private static final long TIMEOUT = 15000;
+  private static final int MAX_REQUESTS = 5;
+  private final AtomicInteger parserRequestsCount = new AtomicInteger(0);
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final ArticleClassifier articleClassifier;
+  private final ArticlesRepository articlesRepository;
+  private final CategoryRepository categoryRepository;
+  private Website website;
+
+  public void setWebsite(Website website) {
+    this.website = website;
+  }
+
+  private String getSystemPrompt(List<String> categoryNames) {
+    return """
+        Ты - эксперт по анализу новостных статей. Твоя задача - извлечь основную информацию из HTML-страницы и классифицировать статью.
+        
+        Извлеки следующую информацию:
+        1. Заголовок статьи
+        2. Описание/краткое содержание
+        3. Дату публикации
+        4. Категории статьи (выбери из списка: %s)
+        
+        Правила классификации:
+        - Выбери не более 3 наиболее подходящих категорий из списка
+        - Используй ТОЛЬКО категории из указанного списка, без изменений и дополнений
+        - Если статья не подходит ни под одну категорию, верни пустой массив категорий
+        - Категории должны точно соответствовать названиям из списка
+        - ВАЖНО: используй ТОЧНО эти названия категорий, без изменений: %s
+        
+        Верни информацию в формате JSON:
+        {
+          "title": "Заголовок статьи",
+          "description": "Описание статьи",
+          "publishedDate": "Дата публикации",
+          "categories": ["Категория1", "Категория2"]
+        }
+        
+        Если не можешь определить какую-то информацию, верни пустую строку для этого поля.
+        ВАЖНО: верни ТОЛЬКО JSON объект без дополнительного форматирования, обратных кавычек и других символов.
+        """.formatted(String.join(", ", categoryNames), String.join(", ", categoryNames));
+  }
 
   @Override
   public String getNAME() {
@@ -81,69 +125,84 @@ public class AIArticleParser implements SiteParser {
     });
   }
 
-  public ParsedArticle parseArticle(String html) {
-    try {
-      html = html.replaceAll("(?s)<script[^>]*>.*?</script>", "")
-          .replaceAll("(?s)<style[^>]*>.*?</style>", "")
-          .replaceAll("<link[^>]*>", "")
-          .replaceAll("(?s)<noscript[^>]*>.*?</noscript>", "")
-          .replaceAll("(?s)<!--.*?-->", "")
-          .replaceAll("<[^>]+>", " ")
-          .replaceAll("\\s+", " ")
-          .trim();
+  private String cleanHtml(String html) {
+    return html.replaceAll("(?s)<script[^>]*>.*?</script>", "")
+        .replaceAll("(?s)<style[^>]*>.*?</style>", "")
+        .replaceAll("<link[^>]*>", "")
+        .replaceAll("(?s)<noscript[^>]*>.*?</noscript>", "")
+        .replaceAll("(?s)<!--.*?-->", "")
+        .replaceAll("<[^>]+>", " ")
+        .replaceAll("\\s+", " ")
+        .trim();
+  }
 
-      int maxLength = 8000;
-      if (html.length() > maxLength) {
-        html = html.substring(0, maxLength) + "...";
+  public ParsedArticle parseArticle(String html) {
+    if (website == null) {
+      log.error("Website не установлен");
+      return new ParsedArticle("", "", "", List.of());
+    }
+
+    try {
+      List<Category> allCategories = categoryRepository.findAll();
+      if (allCategories.isEmpty()) {
+        log.warn("Нет категорий в базе данных");
+        return new ParsedArticle("", "", "", List.of());
       }
 
-      String systemPrompt = "Ты — эксперт по парсингу новостных статей. Твоя задача — извлечь основную информацию из HTML кода статьи.\n" +
-          "Ты ДОЛЖЕН вернуть JSON объект в формате:\n" +
-          "{\n" +
-          "  \"title\": \"заголовок статьи\",\n" +
-          "  \"description\": \"краткое описание статьи\",\n" +
-          "  \"content\": \"основной текст статьи\",\n" +
-          "  \"author\": \"автор статьи (если есть)\",\n" +
-          "  \"publishedDate\": \"дата публикации (если есть)\"\n" +
-          "}\n\n" +
-          "Правила:\n" +
-          "1. Извлекай только релевантную информацию\n" +
-          "2. Игнорируй рекламу, меню, футеры и другие элементы интерфейса\n" +
-          "3. Описание должно быть кратким (до 200 символов)\n" +
-          "4. Если какое-то поле не найдено, оставь его пустым\n" +
-          "5. Удаляй HTML теги из текста\n" +
-          "6. Сохраняй форматирование текста (абзацы, списки)\n" +
-          "7. Если текст слишком длинный, обрезай его до разумного размера\n" +
-          "8. ВСЕГДА экранируй специальные символы в JSON (\\n, \\r, \\t, \\\")\n" +
-          "9. Дата публикации должна быть в формате ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)\n" +
-          "10. Заголовок должен быть первым значимым текстом в статье\n\n" +
-          "Пример ответа:\n" +
-          "{\n" +
-          "  \"title\": \"Новый iPhone получил революционную камеру\",\n" +
-          "  \"description\": \"Apple представила новый iPhone с улучшенной системой камер и искусственным интеллектом для обработки фотографий.\",\n" +
-          "  \"content\": \"Компания Apple представила новый iPhone...\",\n" +
-          "  \"author\": \"Иван Петров\",\n" +
-          "  \"publishedDate\": \"2024-05-06T12:00:00Z\"\n" +
-          "}";
+      List<String> categoryNames = allCategories.stream()
+          .map(Category::getName)
+          .filter(name -> !name.startsWith("/"))
+          .filter(name -> name.matches("^[a-zA-Zа-яА-Я0-9\\s]+$"))
+          .toList();
 
-      String response = askAI(systemPrompt, html);
-      ParsedArticle article = parseResponse(response);
-      if (!article.getTitle().isEmpty()) {
-        Article articleForClassification = new Article();
-        articleForClassification.setName(article.getTitle());
-        articleForClassification.setDescription(article.getDescription());
-        List<Category> categories = articleClassifier.classifyArticle(articleForClassification);
+      if (categoryNames.isEmpty()) {
+        log.warn("Нет валидных категорий для классификации");
+        return new ParsedArticle("", "", "", List.of());
+      }
+
+      String cleanedHtml = cleanHtml(html);
+      if (cleanedHtml.length() > 15000) {
+        cleanedHtml = cleanedHtml.substring(0, 15000);
+      }
+
+      String response = askAI(getSystemPrompt(categoryNames), cleanedHtml);
+      ParsedArticle parsedArticle = parseResponse(response);
+
+      if (!parsedArticle.getTitle().isEmpty() && !parsedArticle.getDescription().isEmpty()) {
+        String contentHash = String.valueOf(
+            (parsedArticle.getTitle() + parsedArticle.getDescription()).hashCode()
+        );
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        String articleUrl = website.getUrl() + "#" + contentHash + "_" + timestamp;
+
+        Article article = Article.builder()
+            .name(parsedArticle.getTitle())
+            .description(parsedArticle.getDescription())
+            .date(LocalDateTime.now())
+            .siteDate(parsedArticle.getPublishedDate())
+            .url(articleUrl)
+            .website(website)
+            .build();
+
+        Set<Category> categories = allCategories.stream()
+            .filter(category -> parsedArticle.getCategories().contains(category.getName()))
+            .collect(Collectors.toSet());
+        
         if (!categories.isEmpty()) {
-          log.info("Статья '{}' классифицирована по категориям: {}",
-              article.getTitle(),
-              categories.stream().map(Category::getName).reduce((a, b) -> a + ", " + b).orElse(""));
+          article.setCategories(categories);
+          articlesRepository.save(article);
+          log.info("Статья '{}' сохранена с категориями: {}", 
+              article.getName(), 
+              categories.stream().map(Category::getName).collect(Collectors.joining(", ")));
+        } else {
+          log.info("Для статьи '{}' не найдено подходящих категорий", article.getName());
         }
       }
 
-      return article;
+      return parsedArticle;
     } catch (Exception e) {
       log.error("Ошибка при парсинге статьи: {}", e.getMessage());
-      return new ParsedArticle();
+      return new ParsedArticle("", "", "", List.of());
     }
   }
 
@@ -183,59 +242,30 @@ public class AIArticleParser implements SiteParser {
 
   private ParsedArticle parseResponse(String response) {
     try {
-      int startIdx = response.indexOf("{");
-      int endIdx = response.lastIndexOf("}") + 1;
-      if (startIdx == -1 || endIdx <= startIdx) {
-        log.error("Не найден JSON объект в ответе: {}", response);
-        return new ParsedArticle();
-      }
-
-      String json = response.substring(startIdx, endIdx);
-      json = json.replace("\\n", " ")
-          .replace("\\r", " ")
-          .replace("\\t", " ")
-          .replaceAll("\\s+", " ")
+      response = response.replaceAll("```json\\s*", "")
+          .replaceAll("```\\s*$", "")
+          .replaceAll("`", "")
           .trim();
 
-      try {
-        JsonNode root = objectMapper.readTree(json);
-        ParsedArticle article = new ParsedArticle();
-        if (root.has("title") && !root.get("title").asText().trim().isEmpty()) {
-          article.setTitle(root.get("title").asText().trim());
+      ObjectMapper mapper = new ObjectMapper();
+      JsonNode root = mapper.readTree(response);
+      
+      String title = root.path("title").asText("");
+      String description = root.path("description").asText("");
+      String publishedDate = root.path("publishedDate").asText("");
+      
+      List<String> categories = new ArrayList<>();
+      JsonNode categoriesNode = root.path("categories");
+      if (categoriesNode.isArray()) {
+        for (JsonNode categoryNode : categoriesNode) {
+          categories.add(categoryNode.asText());
         }
-
-        if (root.has("description") && !root.get("description").asText().trim().isEmpty()) {
-          article.setDescription(root.get("description").asText().trim());
-        }
-
-        if (root.has("content") && !root.get("content").asText().trim().isEmpty()) {
-          article.setContent(root.get("content").asText().trim());
-        }
-
-
-        if (root.has("author") && !root.get("author").asText().trim().isEmpty()) {
-          article.setAuthor(root.get("author").asText().trim());
-        }
-
-        if (root.has("publishedDate") && !root.get("publishedDate").asText().trim().isEmpty()) {
-          article.setPublishedDate(root.get("publishedDate").asText().trim());
-        }
-
-
-        if (article.getTitle().isEmpty() && article.getDescription().isEmpty()) {
-          log.error("Статья не содержит ни заголовка, ни описания");
-          return new ParsedArticle();
-        }
-
-        return article;
-      } catch (Exception e) {
-        log.error("Ошибка при парсинге JSON: {}. Ответ нейросети: {}", e.getMessage(), json);
-        return new ParsedArticle();
       }
+      
+      return new ParsedArticle(title, description, publishedDate, categories);
     } catch (Exception e) {
-      log.error("Ошибка при парсинге ответа нейросети: {}", e.getMessage());
-      log.error("Ответ нейросети: {}", response);
-      return new ParsedArticle();
+      log.error("Ошибка при разборе ответа от AI: {}\nОтвет: {}", e.getMessage(), response);
+      return new ParsedArticle("", "", "", List.of());
     }
   }
 
@@ -243,8 +273,18 @@ public class AIArticleParser implements SiteParser {
   public static class ParsedArticle {
     private String title = "";
     private String description = "";
-    private String content = "";
-    private String author = "";
     private String publishedDate = "";
+    private List<String> categories = new ArrayList<>();
+    private String url = "";
+
+    public ParsedArticle(String title, String description, String publishedDate, List<String> categories) {
+      this.title = title;
+      this.description = description;
+      this.publishedDate = publishedDate;
+      this.categories = categories;
+    }
+
+    public ParsedArticle() {
+    }
   }
 }

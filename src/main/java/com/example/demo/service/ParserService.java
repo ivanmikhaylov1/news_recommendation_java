@@ -134,10 +134,19 @@ public class ParserService {
             log.error("Ошибка при сохранении переведенной статьи {}: {}", articleDTO.getUrl(), e.getMessage(), e);
           }
         })
-        .join(); // Ждем завершения перевода и сохранения
+        .join();
   }
 
   private void saveArticle(ArticleDTO articleDTO, Website website) {
+    boolean articleExists = articlesRepository.existsByNameAndDescription(
+        articleDTO.getName(),
+        articleDTO.getDescription()
+    );
+
+    if (articleExists) {
+      return;
+    }
+
     Article article = Article.builder()
         .name(limitStringLength(articleDTO.getName()))
         .url(limitStringLength(articleDTO.getUrl()))
