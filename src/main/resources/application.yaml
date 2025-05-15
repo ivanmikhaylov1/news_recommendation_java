@@ -10,6 +10,10 @@ logging:
         demo:
           service:
             ParserService: DEBUG
+    org:
+      springframework:
+        security: INFO
+        web: INFO
 
 spring:
   datasource:
@@ -50,8 +54,11 @@ management:
     web:
       base-path: /admin
       exposure:
-        include: "*"
+        include: health,info,metrics,prometheus
         exclude: shutdown
+  endpoint:
+    health:
+      show-details: always
 
 telegram:
   bot:

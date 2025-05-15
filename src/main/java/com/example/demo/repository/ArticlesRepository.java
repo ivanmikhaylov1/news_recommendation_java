@@ -21,4 +21,7 @@ public interface ArticlesRepository extends JpaRepository<Article, Long> {
 
   @Query("SELECT DISTINCT a FROM Article a WHERE a.id > :minId ORDER BY a.id")
   List<Article> findByMinId(@Param("minId") Long minId);
+
+  @Query("SELECT COUNT(a) > 0 FROM Article a WHERE a.name = :name AND a.description = :description")
+  boolean existsByNameAndDescription(@Param("name") String name, @Param("description") String description);
 }

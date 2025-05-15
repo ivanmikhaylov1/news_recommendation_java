@@ -77,8 +77,7 @@ public class NotificationService {
         StringBuilder tags = new StringBuilder();
 
         for (Category category : article.getCategories()) {
-            tags.append("#").append(category.getName().toLowerCase()
-                    .replace(" ", ""));
+            tags.append("#").append(category.getName().toLowerCase());
         }
         return tags.toString();
     }
