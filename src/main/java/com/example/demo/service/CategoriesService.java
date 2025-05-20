@@ -70,8 +70,14 @@ public class CategoriesService {
     User freshUser = userRepository.findById(user.getId())
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-    freshUser.getCategories().remove(category);
-    userRepository.save(freshUser);
+    if (category.getOwner() != null && category.getOwner().getId().equals(user.getId())) {
+      repository.delete(category);
+      log.info("Категория с ID {} полностью удалена из базы данных", categoryId);
+    } else {
+      freshUser.getCategories().remove(category);
+      userRepository.save(freshUser);
+      log.info("Категория с ID {} удалена у пользователя с ID {}", categoryId, user.getId());
+    }
   }
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)

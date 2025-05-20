@@ -77,9 +77,14 @@ public class WebsitesService {
     User freshUser = userRepository.findById(user.getId())
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-    freshUser.getWebsites().remove(website);
-    userRepository.save(freshUser);
-    log.info("Сайт с ID {} успешно удален у пользователя с ID {}", websiteId, user.getId());
+    if (website.getOwner() != null && website.getOwner().getId().equals(user.getId())) {
+      repository.delete(website);
+      log.info("Сайт с ID {} полностью удален из базы данных", websiteId);
+    } else {
+      freshUser.getWebsites().remove(website);
+      userRepository.save(freshUser);
+      log.info("Сайт с ID {} удален у пользователя с ID {}", websiteId, user.getId());
+    }
   }
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)

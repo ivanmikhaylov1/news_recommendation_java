@@ -43,7 +43,7 @@ public class ParserFactory {
       }
     }
 
-    return new AISiteParser(aiArticleParser, website.getUrl());
+    return new AISiteParser(aiArticleParser, website);
   }
 
   private boolean isWebsiteAccessible(String url) {
@@ -93,9 +93,10 @@ public class ParserFactory {
     private final AIArticleParser aiArticleParser;
     private final String url;
 
-    public AISiteParser(AIArticleParser aiArticleParser, String url) {
+    public AISiteParser(AIArticleParser aiArticleParser, Website website) {
       this.aiArticleParser = aiArticleParser;
-      this.url = url;
+      this.url = website.getUrl();
+      this.aiArticleParser.setWebsite(website);
     }
 
     @Override
@@ -118,11 +119,20 @@ public class ParserFactory {
 
         AIArticleParser.ParsedArticle parsedArticle = aiArticleParser.parseArticle(document.html());
 
+        if (parsedArticle.getTitle().isEmpty() && parsedArticle.getDescription().isEmpty()) {
+          return List.of();
+        }
+
+        String contentHash = String.valueOf(
+            (parsedArticle.getTitle() + parsedArticle.getDescription()).hashCode()
+        );
+        String articleUrl = url + "#" + contentHash;
+
         ArticleDTO article = ArticleDTO.builder()
             .name(parsedArticle.getTitle())
             .description(parsedArticle.getDescription())
             .date(parsedArticle.getPublishedDate())
-            .url(url)
+            .url(articleUrl)
             .build();
 
         return List.of(article);
@@ -148,11 +158,20 @@ public class ParserFactory {
 
           AIArticleParser.ParsedArticle parsedArticle = aiArticleParser.parseArticle(document.html());
 
+          if (parsedArticle.getTitle().isEmpty() && parsedArticle.getDescription().isEmpty()) {
+            return Optional.empty();
+          }
+
+          String contentHash = String.valueOf(
+              (parsedArticle.getTitle() + parsedArticle.getDescription()).hashCode()
+          );
+          String articleUrl = link + "#" + contentHash;
+
           ArticleDTO article = ArticleDTO.builder()
               .name(parsedArticle.getTitle())
               .description(parsedArticle.getDescription())
               .date(parsedArticle.getPublishedDate())
-              .url(link)
+              .url(articleUrl)
               .build();
 
           return Optional.of(article);

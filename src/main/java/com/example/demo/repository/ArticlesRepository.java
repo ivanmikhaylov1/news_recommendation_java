@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ArticlesRepository extends JpaRepository<Article, Long> {
@@ -21,4 +22,13 @@ public interface ArticlesRepository extends JpaRepository<Article, Long> {
 
   @Query("SELECT DISTINCT a FROM Article a WHERE a.id > :minId ORDER BY a.id")
   List<Article> findByMinId(@Param("minId") Long minId);
+
+  @Query("SELECT COUNT(a) > 0 FROM Article a WHERE a.name = :name AND a.description = :description")
+  boolean existsByNameAndDescription(@Param("name") String name, @Param("description") String description);
+
+  Optional<Article> findByName(String name);
+
+  Optional<Article> findByDescription(String description);
+
+  Optional<Article> findByUrlContaining(String urlPart);
 }

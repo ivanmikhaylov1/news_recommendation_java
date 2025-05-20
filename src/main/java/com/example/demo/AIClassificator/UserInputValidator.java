@@ -1,31 +1,40 @@
 package com.example.demo.AIClassificator;
 
-import com.azure.ai.inference.ChatCompletionsClient;
-import com.azure.ai.inference.ChatCompletionsClientBuilder;
-import com.azure.ai.inference.models.*;
-import com.azure.core.credential.AzureKeyCredential;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.cdimascio.dotenv.Dotenv;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserInputValidator {
   private static final Dotenv dotenv = Dotenv.load();
-  private static final String KEY = dotenv.get("KEY");
-  private static final String ENDPOINT = dotenv.get("ENDPOINT");
-  private static final String MODEL = dotenv.get("MODEL");
-  private static final long TIMEOUT = 15000;
+  private static final long TIMEOUT = 30000;
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final UrlValidator urlValidator;
+  private final AICache aiCache;
+
+  @Value("${ai.key.validator.value}")
+  private String KEY;
+
+  @Value("${ai.endpoint}")
+  private String ENDPOINT;
+
+  @Value("${ai.model}")
+  private String MODEL;
 
   public ValidationResult validateCategoryName(String categoryName) {
     try {
@@ -82,35 +91,80 @@ public class UserInputValidator {
 
   private String askAI(String systemPrompt, String userPrompt) throws TimeoutException {
     log.info("Отправка запроса к нейросети:\nСистемный промпт: {}\nПользовательский промпт: {}", systemPrompt, userPrompt);
-    ChatCompletionsClient client = new ChatCompletionsClientBuilder()
-        .credential(new AzureKeyCredential(KEY))
-        .endpoint(ENDPOINT)
-        .buildClient();
+    try {
+      String cacheKey = systemPrompt + "|" + userPrompt;
+      
+      if (aiCache.contains(cacheKey)) {
+        log.info("Найдено в кэше, используем сохраненный ответ");
+        return aiCache.get(cacheKey);
+      }
 
-    List<ChatRequestMessage> chatMessages = Arrays.asList(
-        new ChatRequestSystemMessage(systemPrompt),
-        new ChatRequestUserMessage(userPrompt)
-    );
+      Map<String, Object> system = Map.of(
+          "role", "system",
+          "content", systemPrompt);
+      Map<String, Object> user = Map.of(
+          "role", "user",
+          "content", userPrompt);
 
-    ChatCompletionsOptions options = new ChatCompletionsOptions(chatMessages);
-    options.setModel(MODEL);
-    options.setTemperature(0.2);
-    options.setMaxTokens(100);
-    options.setTopP(0.8);
-    options.setFrequencyPenalty(0.5);
-    options.setPresencePenalty(0.5);
+      List<Map<String, Object>> messages = List.of(system, user);
+      Map<String, Object> body = new HashMap<>();
+      body.put("model", MODEL);
+      body.put("messages", messages);
+      body.put("temperature", 0.2);
+      body.put("top_p", 0.8);
+      body.put("frequency_penalty", 0.5);
+      body.put("presence_penalty", 0.5);
+      body.put("max_tokens", 100);
 
-    final long startTime = System.currentTimeMillis();
-    ChatCompletions completions = client.complete(options);
-    String response = completions.getChoices().get(0).getMessage().getContent();
+      String requestBody = objectMapper.writeValueAsString(body);
 
-    log.info("Получен ответ от нейросети:\n{}", response);
+      HttpClient client = HttpClient.newHttpClient();
+      HttpRequest request = HttpRequest.newBuilder()
+          .uri(URI.create(ENDPOINT + "chat/completions"))
+          .header("Authorization", "Bearer " + KEY)
+          .header("Content-Type", "application/json")
+          .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+          .build();
 
-    if (System.currentTimeMillis() - startTime > TIMEOUT) {
-      throw new TimeoutException("Превышено время ожидания ответа от нейросети");
+      final long startTime = System.currentTimeMillis();
+      HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+      String responseBody = response.body();
+
+      log.info("Получен ответ от нейросети:\n{}", responseBody);
+
+      if (System.currentTimeMillis() - startTime > TIMEOUT) {
+        throw new TimeoutException("Превышено время ожидания ответа от нейросети");
+      }
+
+      JsonNode root = objectMapper.readTree(responseBody);
+      String content = root.path("choices").get(0).path("message").path("content").asText();
+      
+      log.debug("Получено содержимое от нейросети до обработки: {}", content);
+      
+      if (content == null || content.trim().isEmpty()) {
+        log.error("Получено пустое содержимое от нейросети");
+        throw new RuntimeException("Пустой ответ от нейросети");
+      }
+      
+      content = content.replaceAll("```json\\s*", "")
+          .replaceAll("```\\s*$", "")
+          .replaceAll("`", "")
+          .trim();
+          
+      log.debug("Содержимое после обработки: {}", content);
+      
+      if (content.isEmpty()) {
+        log.error("После обработки получена пустая строка");
+        throw new RuntimeException("Пустой ответ после обработки");
+      }
+
+      aiCache.put(cacheKey, content);
+          
+      return content;
+    } catch (Exception e) {
+      log.error("Ошибка при обращении к нейросети: {}", e.getMessage());
+      throw new RuntimeException("Ошибка при обращении к нейросети", e);
     }
-
-    return response;
   }
 
   private ValidationResult parseValidationResult(String response) {

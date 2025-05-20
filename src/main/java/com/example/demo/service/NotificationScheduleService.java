@@ -39,7 +39,6 @@ public class NotificationScheduleService {
       }
 
       schedule = scheduleRepository.save(schedule);
-      NotificationScheduleDTO.fromEntity(schedule);
     } catch (Exception e) {
       log.error("Ошибка при обновлении времени уведомлений для пользователя {}: {}", userId, e.getMessage());
       throw e;
@@ -56,9 +55,16 @@ public class NotificationScheduleService {
       NotificationSchedule schedule;
       Optional<NotificationSchedule> existingSchedule = scheduleRepository.findActiveByUserId(userId);
 
-      schedule = existingSchedule.orElseGet(() -> NotificationSchedule.createDefaultSchedule(user));
-      schedule.setIsActive(isActive);
+      if (existingSchedule.isPresent()) {
+        schedule = existingSchedule.get();
+        schedule.setIsActive(isActive);
+      } else {
+        schedule = NotificationSchedule.createDefaultSchedule(user);
+        schedule.setIsActive(isActive);
+      }
+
       schedule = scheduleRepository.save(schedule);
+      log.info("Статус расписания для пользователя {} изменен на {}", userId, isActive);
       return NotificationScheduleDTO.fromEntity(schedule);
     } catch (Exception e) {
       log.error("Ошибка при переключении статуса уведомлений для пользователя {}: {}", userId, e.getMessage());
@@ -80,18 +86,10 @@ public class NotificationScheduleService {
         schedule = existingSchedule.get();
         log.debug("Найдено существующее расписание для пользователя {}", userId);
       } else {
-
-        synchronized (this) {
-          existingSchedule = scheduleRepository.findActiveByUserId(userId);
-          if (existingSchedule.isPresent()) {
-            schedule = existingSchedule.get();
-            log.debug("Найдено существующее расписание при повторной проверке для пользователя {}", userId);
-          } else {
-            schedule = NotificationSchedule.createDefaultSchedule(user);
-            schedule = scheduleRepository.save(schedule);
-            log.info("Создано новое расписание по умолчанию для пользователя {}", userId);
-          }
-        }
+        schedule = NotificationSchedule.createDefaultSchedule(user);
+        schedule.setIsActive(false);
+        schedule = scheduleRepository.save(schedule);
+        log.info("Создано новое неактивное расписание для пользователя {}", userId);
       }
 
       return NotificationScheduleDTO.fromEntity(schedule);
