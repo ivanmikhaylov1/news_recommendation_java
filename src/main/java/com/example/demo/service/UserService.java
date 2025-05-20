@@ -72,16 +72,18 @@ public class UserService {
     User user = userRepository.findById(userId)
         .orElseThrow(() -> new EntityNotFoundException("Пользователь с ID " + userId + " не найден"));
 
+    for (NotificationSchedule schedule : user.getNotificationSchedules()) {
+      schedule.setIsActive(false);
+    }
+    scheduleRepository.saveAll(user.getNotificationSchedules());
 
     user.getCategories().clear();
     user.getWebsites().clear();
     userRepository.save(user);
-    scheduleRepository.deleteByUserId(userId);
     articlesRepository.deleteByWebsiteOwner(user);
     for (Category category : user.getOwnedCategories()) {
       category.setOwner(null);
     }
-
     categoryRepository.saveAll(user.getOwnedCategories());
     user.getOwnedCategories().clear();
     for (Website website : user.getOwnedWebsites()) {

@@ -12,24 +12,39 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.cdimascio.dotenv.Dotenv;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import com.fasterxml.jackson.databind.JsonNode;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ArticleClassifier {
   private static final Dotenv dotenv = Dotenv.load();
-  private static final String KEY = dotenv.get("KEY");
-  private static final String ENDPOINT = dotenv.get("ENDPOINT");
-  private static final String MODEL = dotenv.get("MODEL");
-  private static final long TIMEOUT = 15000;
+  private static final long TIMEOUT = 600000;
   private final CategoryRepository categoryRepository;
   private final ObjectMapper objectMapper = new ObjectMapper();
+  private final AICache aiCache;
+
+  @Value("${ai.key.classifier.value}")
+  private String KEY;
+
+  @Value("${ai.endpoint}")
+  private String ENDPOINT;
+
+  @Value("${ai.model}")
+  private String MODEL;
 
   public List<Category> classifyArticle(Article article) {
     try {
@@ -84,6 +99,22 @@ public class ArticleClassifier {
           "Если текст относится к нескольким категориям, верни массив с несколькими категориями. " +
           "Не бойся использовать пользовательские категории, если они подходят по смыслу.";
 
+      String cacheKey = systemPrompt + "|" + text;
+      
+      if (aiCache.contains(cacheKey)) {
+        log.info("Найдено в кэше, используем сохраненный результат классификации");
+        String cachedResponse = aiCache.get(cacheKey);
+        List<String> selectedCategoryNames = extractCategories(cachedResponse, categoryNames);
+        List<Category> resultCategories = new ArrayList<>();
+        for (Category category : allCategories) {
+          if (selectedCategoryNames.contains(category.getName())) {
+            resultCategories.add(category);
+          }
+        }
+
+        return resultCategories;
+      }
+
       try {
         String response = askAI(systemPrompt, text);
         List<String> selectedCategoryNames = extractCategories(response, categoryNames);
@@ -108,32 +139,84 @@ public class ArticleClassifier {
   private String askAI(String systemPrompt, String userPrompt) {
     log.info("Отправка запроса к нейросети:\nСистемный промпт: {}\nПользовательский промпт: {}", systemPrompt, userPrompt);
     try {
-      ChatCompletionsClient client = new ChatCompletionsClientBuilder()
-          .credential(new AzureKeyCredential(KEY))
-          .endpoint(ENDPOINT)
-          .buildClient();
+      Map<String, Object> system = Map.of(
+          "role", "system",
+          "content", systemPrompt);
+      Map<String, Object> user = Map.of(
+          "role", "user",
+          "content", userPrompt);
 
-      List<ChatRequestMessage> chatMessages = Arrays.asList(
-          new ChatRequestSystemMessage(systemPrompt),
-          new ChatRequestUserMessage(userPrompt)
-      );
+      List<Map<String, Object>> messages = List.of(system, user);
+      Map<String, Object> body = new HashMap<>();
+      body.put("model", MODEL);
+      body.put("messages", messages);
+      body.put("temperature", 0.2);
+      body.put("top_p", 0.8);
+      body.put("frequency_penalty", 0.5);
+      body.put("presence_penalty", 0.5);
+      body.put("max_tokens", 2000);
+      body.put("min_tokens", 50);
 
-      ChatCompletionsOptions options = new ChatCompletionsOptions(chatMessages);
-      options.setModel(MODEL);
-      options.setTemperature(0.2);
-      options.setMaxTokens(1000);
-      options.setTopP(0.8);
-      options.setFrequencyPenalty(0.5);
-      options.setPresencePenalty(0.5);
+      String requestBody = objectMapper.writeValueAsString(body);
+
+      HttpClient client = HttpClient.newHttpClient();
+      HttpRequest request = HttpRequest.newBuilder()
+          .uri(URI.create(ENDPOINT + "chat/completions"))
+          .header("Authorization", "Bearer " + KEY)
+          .header("Content-Type", "application/json")
+          .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+          .build();
+
       final long startTime = System.currentTimeMillis();
-      ChatCompletions completions = client.complete(options);
-      String response = completions.getChoices().get(0).getMessage().getContent();
-      log.info("Получен ответ от нейросети:\n{}", response);
+      HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+      String responseBody = response.body();
+
+      log.info("Получен ответ от нейросети:\n{}", responseBody);
+
       if (System.currentTimeMillis() - startTime > TIMEOUT) {
         throw new TimeoutException("Превышено время ожидания ответа от нейросети");
       }
 
-      return response;
+      JsonNode root = objectMapper.readTree(responseBody);
+      
+      if (!root.has("choices") || !root.get("choices").isArray() || root.get("choices").size() == 0) {
+        log.error("Неверная структура ответа от нейросети: отсутствует массив choices");
+        throw new RuntimeException("Неверная структура ответа от нейросети");
+      }
+
+      JsonNode choices = root.get("choices");
+      JsonNode firstChoice = choices.get(0);
+      
+      if (firstChoice == null || !firstChoice.has("message") || !firstChoice.get("message").has("content")) {
+        log.error("Неверная структура ответа от нейросети: отсутствует message.content");
+        throw new RuntimeException("Неверная структура ответа от нейросети");
+      }
+
+      String content = firstChoice.get("message").get("content").asText();
+      
+      log.debug("Получено содержимое от нейросети до обработки: {}", content);
+      
+      if (content == null || content.trim().isEmpty()) {
+        log.error("Получено пустое содержимое от нейросети");
+        throw new RuntimeException("Пустой ответ от нейросети");
+      }
+      
+      content = content.replaceAll("```json\\s*", "")
+          .replaceAll("```\\s*$", "")
+          .replaceAll("`", "")
+          .trim();
+          
+      log.debug("Содержимое после обработки: {}", content);
+      
+      if (content.isEmpty()) {
+        log.error("После обработки получена пустая строка");
+        throw new RuntimeException("Пустой ответ после обработки");
+      }
+
+      String cacheKey = systemPrompt + "|" + userPrompt;
+      aiCache.put(cacheKey, content);
+          
+      return content;
     } catch (Exception e) {
       log.error("Ошибка при обращении к нейросети: {}", e.getMessage());
       throw new RuntimeException("Ошибка при обращении к нейросети", e);
